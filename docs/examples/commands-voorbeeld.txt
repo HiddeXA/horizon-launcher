@@ -1,0 +1,9 @@
+# Voorbeeld-testlijst voor 5-diagnose. Kopieer naar logs\commands.txt.
+# Start Horizon, wacht tot de catalogus geladen is en maak een screenshot.
+am start -n nl.thuis.launcher/.bios.BiosActivity
+waitlog Bios 60 klaar
+require bios.BiosActivity
+input keyevent KEYCODE_DPAD_DOWN
+sleep 1
+screencap -p /sdcard/horizon.png
+adb pull /sdcard/horizon.png logs/horizon.png

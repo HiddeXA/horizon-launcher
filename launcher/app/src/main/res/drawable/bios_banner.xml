@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 320x180 tegel voor Bios: zwart met een rode speelknop en filmstrook -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#141414" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#E50914" android:pathData="M0,0h320v14h-320z" />
+    <path android:fillColor="#E50914" android:pathData="M0,166h320v14h-320z" />
+    <path android:fillColor="#141414" android:pathData="M10,4h14v6h-14zM40,4h14v6h-14zM70,4h14v6h-14zM100,4h14v6h-14zM130,4h14v6h-14zM160,4h14v6h-14zM190,4h14v6h-14zM220,4h14v6h-14zM250,4h14v6h-14zM280,4h14v6h-14z" />
+    <path android:fillColor="#141414" android:pathData="M10,170h14v6h-14zM40,170h14v6h-14zM70,170h14v6h-14zM100,170h14v6h-14zM130,170h14v6h-14zM160,170h14v6h-14zM190,170h14v6h-14zM220,170h14v6h-14zM250,170h14v6h-14zM280,170h14v6h-14z" />
+    <path android:fillColor="#E50914" android:pathData="M138,62 L188,90 L138,118 Z" />
+</vector>

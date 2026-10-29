@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Thuis" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0B0D10</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <!-- Horizon: inktblauw vanaf het eerste beeld, zodat de startanimatie naadloos begint -->
+    <style name="Theme.Horizon" parent="Theme.Thuis">
+        <item name="android:windowBackground">#0B132B</item>
+    </style>
+</resources>

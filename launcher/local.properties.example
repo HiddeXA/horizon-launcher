@@ -1,0 +1,11 @@
+# Kopieer naar local.properties (of gebruik 1-sleutels.cmd). Dit bestand gaat nooit mee naar git.
+# Alles is optioneel en kan ook later op de tv worden ingevuld (tandwiel in de launcher).
+
+# TMDB "API Read Access Token" (de lange, begint met eyJ): themoviedb.org > Instellingen > API
+tmdb.token=
+# OMDb API key (gratis, 1.000 verzoeken per dag): omdbapi.com
+omdb.key=
+# Je eigen Xtream-abonnement (voor Horizon en Horizon TV)
+xtream.server=
+xtream.user=
+xtream.pass=

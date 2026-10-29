@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 320x180 banner voor de Android TV app-lijst -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#0E1116" android:pathData="M0,0h320v180h-320z" />
+    <!-- simpel huisje -->
+    <path android:fillColor="#F2B84B" android:pathData="M160,40 L215,88 L200,88 L200,140 L120,140 L120,88 L105,88 Z" />
+    <path android:fillColor="#0E1116" android:pathData="M148,105h24v35h-24z" />
+</vector>

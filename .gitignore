@@ -1,0 +1,22 @@
+# Sleutels en persoonlijke instellingen: nooit committen
+local.properties
+tv-adres.txt
+*.keystore
+*.jks
+
+# Bouwresultaten en gereedschap
+tools-cache/
+build/
+.gradle/
+*.apk
+*.aab
+
+# Logboeken, screenshots en testlijsten van je eigen tv
+logs/
+
+# Editors
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

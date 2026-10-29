@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+: het systeem-opstartscherm leeg en inktblauw, onze eigen animatie neemt het over -->
+    <style name="Theme.Horizon" parent="Theme.Thuis">
+        <item name="android:windowBackground">#0B132B</item>
+        <item name="android:windowSplashScreenBackground">#0B132B</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_leeg</item>
+        <item name="android:windowSplashScreenAnimationDuration">0</item>
+    </style>
+</resources>
