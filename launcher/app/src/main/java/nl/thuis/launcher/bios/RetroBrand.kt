@@ -64,6 +64,11 @@ private fun fitWord(measurer: TextMeasurer, word: String, h: Float, maxW: Float,
     }
 }
 
+private fun taglineLayout(measurer: TextMeasurer, text: String, h: Float, density: Float): TextLayoutResult =
+    retroCache.getOrPut("tag/$text/${h.toInt()}") {
+        measurer.measure(text, TextStyle(fontFamily = Poppins, fontWeight = FontWeight.Medium, fontStyle = FontStyle.Italic, fontSize = (h * 0.15f / density).sp, letterSpacing = 1.5.sp))
+    }
+
 private fun stickerLayout(measurer: TextMeasurer, text: String, h: Float, density: Float): TextLayoutResult =
     retroCache.getOrPut("sticker/$text/${h.toInt()}") {
         measurer.measure(text, TextStyle(fontFamily = Poppins, fontWeight = FontWeight.Bold, fontSize = (h * 0.24f / density).sp))
@@ -77,6 +82,7 @@ internal fun DrawScope.drawRetroWordmark(
     measurer: TextMeasurer, badge: String?, left: Float, cy: Float, h: Float, boxW: Float,
     shadow: Float = 1f, wordAlpha: Float = 1f, wordDx: Float = 0f,
     stickerScale: Float = 1f, stickerAlpha: Float = 1f,
+    taglineChars: Int = Int.MAX_VALUE, taglineCursor: Boolean = false,
 ) {
     val word = HorizonColors.palette.wordmark
     val sw = if (badge != null) h * 0.86f else 0f
@@ -101,6 +107,23 @@ internal fun DrawScope.drawRetroWordmark(
             startY = ty + layout.size.height * 0.18f, endY = ty + layout.size.height * 0.82f,
         )
         drawText(layout, brush, topLeft = Offset(x0 + wordDx, ty), alpha = wordAlpha)
+    }
+
+    // Onderregel "Inspired By Eppie Bos": turquoise, schuin, gecentreerd onder het woord.
+    // Alleen bij een groot logo (startanimatie, laadscherm); in de kleine logo's past het niet.
+    val tagline = HorizonColors.palette.tagline
+    if (tagline != null && h >= 40f * density && wordAlpha > 0f && taglineChars > 0) {
+        val full = taglineLayout(measurer, tagline, h, density)
+        val shown = tagline.take(taglineChars)
+        val part = if (shown.length == tagline.length) full else taglineLayout(measurer, shown, h, density)
+        val tx = x0 + tw / 2f - full.size.width / 2f
+        val tyTop = cy + h * 0.36f
+        drawText(part, HorizonColors.Violet, topLeft = Offset(tx + h * 0.012f, tyTop + h * 0.012f), alpha = wordAlpha * 0.9f)
+        drawText(part, HorizonColors.Mint, topLeft = Offset(tx, tyTop), alpha = wordAlpha)
+        if (taglineCursor) {
+            val cx = tx + part.size.width + h * 0.02f
+            drawRect(HorizonColors.Pop.copy(alpha = wordAlpha), Offset(cx, tyTop + part.size.height * 0.22f), Size(h * 0.016f, part.size.height * 0.58f))
+        }
     }
 
     if (badge != null && stickerAlpha > 0f && stickerScale > 0f) {
@@ -221,7 +244,7 @@ private fun easeOutCubic(x: Float) = 1f - (1f - x).pow(3)
 private fun easeInOutCubic(x: Float) = if (x < 0.5f) 4f * x * x * x else 1f - (-2f * x + 2f).pow(3) / 2f
 private fun easeOutBack(x: Float, s: Float = 1.9f): Float { val c3 = s + 1f; return 1f + c3 * (x - 1f).pow(3) + s * (x - 1f).pow(2) }
 
-private const val RETRO_MS = 2900L
+private const val RETRO_MS = 3300L
 private const val RETRO_EXIT_MS = 420L
 
 /**
@@ -285,6 +308,9 @@ fun RetroIntro(skip: Boolean, badge: String? = null, onDone: () -> Unit) {
             wordDx = -(1f - easeOutBack(wp, 1.4f)) * size.width * 0.6f,
             stickerScale = if (t < 1550f) 0f else 1f + 1.4f * (1f - easeOutBack(phase(t, 1550f, 1900f), 1.6f)),
             stickerAlpha = clamp01(phase(t, 1550f, 1700f)) * fade,
+            // Daarna wordt "Inspired By Eppie Bos" erbij getypt, met een knipperend geel cursortje.
+            taglineChars = (phase(t, 1850f, 2350f) * (HorizonColors.palette.tagline?.length ?: 0)).toInt(),
+            taglineCursor = t in 1850f..2400f && (t / 120f).toInt() % 2 == 0,
         )
 
         // Videoband: "▶ PLAY" linksboven (knippert eerst), tellertje linksonder.

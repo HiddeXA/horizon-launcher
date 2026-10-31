@@ -97,6 +97,8 @@ data class HorizonPalette(
     val retro: Boolean = false,
     /** Het woord in het logo. */
     val wordmark: String = "Horizon",
+    /** Onderregel onder het logo (alleen bij grotere logo's: startanimatie, laadscherm). */
+    val tagline: String? = null,
 ) {
     companion object {
         /** Deep Space / Twilight: de Horizon-huisstijl. */
@@ -125,6 +127,7 @@ data class HorizonPalette(
             violet = Color(0xFF9B5CFF),       // paars
             retro = true,
             wordmark = "Roze Hoek",
+            tagline = "Inspired By Eppie Bos",
         )
     }
 }
