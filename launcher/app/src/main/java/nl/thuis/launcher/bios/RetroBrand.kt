@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
@@ -146,7 +147,17 @@ internal fun DrawScope.drawRetroWordmark(
 
 // --- Memphis-patroon ---
 
-internal class MemphisShape(val kind: Int, val center: Offset, val size: Float, val rotation: Float, val color: Int, val path: Path?)
+internal class MemphisShape(
+    val kind: Int, val center: Offset, val size: Float, val rotation: Float, val color: Int, val path: Path?,
+    /** Beweging: zweven in een rondje van [drift] px met [speed] rad/s, en langzaam draaien met [spin] graden/s. */
+    val phase: Float, val speed: Float, val spin: Float, val drift: Float,
+)
+
+/** Zelfde klok voor startanimatie en laadscherm, zodat de vormen naadloos doorzweven. */
+internal fun memphisSeconds(frameMs: Long): Float = (frameMs % 3_600_000L) / 1000f
+
+/** Vormen van de startanimatie en het laadscherm (zelfde set, zodat ze op dezelfde plek doorgaan). */
+const val MEMPHIS_INTRO_SEED = 1995
 
 private fun squiggle(c: Offset, len: Float, amp: Float): Path = Path().apply {
     val n = 28
@@ -191,7 +202,13 @@ internal fun memphisShapes(size: Size, seed: Int, unit: Float): List<MemphisShap
             4 -> zigzag(center, s * 1.8f, s * 0.2f)
             else -> null
         }
-        out += MemphisShape(kind, center, s, rnd.nextFloat() * 360f, rnd.nextInt(4), path)
+        out += MemphisShape(
+            kind, center, s, rnd.nextFloat() * 360f, rnd.nextInt(4), path,
+            phase = rnd.nextFloat() * 2f * PI.toFloat(),
+            speed = 0.45f + rnd.nextFloat() * 0.7f,
+            spin = (rnd.nextFloat() - 0.5f) * 36f,
+            drift = unit * (8f + rnd.nextFloat() * 12f),
+        )
     }
     return out
 }
@@ -203,13 +220,16 @@ private fun memphisColor(i: Int): Color = when (i) {
     else -> HorizonColors.Violet
 }
 
-/** Tekent één vorm; [scale] en [alpha] voor de startanimatie. */
-internal fun DrawScope.drawMemphis(m: MemphisShape, alpha: Float, unit: Float, scale: Float = 1f) {
+/** Tekent één vorm; [scale] en [alpha] voor het erin ploppen, [t] (seconden) voor zweven en draaien (0 = stil). */
+internal fun DrawScope.drawMemphis(m: MemphisShape, alpha: Float, unit: Float, scale: Float = 1f, t: Float = 0f) {
     if (alpha <= 0f || scale <= 0f) return
     val col = memphisColor(m.color).copy(alpha = alpha)
     val stroke = Stroke(width = unit * 3.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    val dx = if (t == 0f) 0f else sin(t * m.speed + m.phase) * m.drift
+    val dy = if (t == 0f) 0f else cos(t * m.speed * 0.8f + m.phase) * m.drift
     withTransform({
-        rotate(m.rotation, m.center)
+        translate(dx, dy)
+        rotate(m.rotation + t * m.spin, m.center)
         scale(scale, scale, m.center)
     }) {
         when (m.kind) {
@@ -257,12 +277,14 @@ private const val RETRO_EXIT_MS = 420L
 fun RetroIntro(skip: Boolean, badge: String? = null, onDone: () -> Unit) {
     val measurer = rememberTextMeasurer()
     var time by remember { mutableLongStateOf(0L) }
+    var startMs by remember { mutableLongStateOf(0L) }
     var exitAt by remember { mutableStateOf<Long?>(null) }
     // Vormen per schermformaat; gewone (geen state) opslag, want ze worden tijdens het tekenen gemaakt.
     val shapeCache = remember { arrayOfNulls<Pair<Size, List<MemphisShape>>>(1) }
 
     LaunchedEffect(Unit) {
         val start = withFrameMillis { it }
+        startMs = start
         while (true) {
             val now = withFrameMillis { it } - start
             time = now
@@ -291,10 +313,12 @@ fun RetroIntro(skip: Boolean, badge: String? = null, onDone: () -> Unit) {
 
         // Memphis-vormen ploppen één voor één erin.
         val shapes = shapeCache[0]?.takeIf { it.first == size }?.second
-            ?: memphisShapes(size, 1995, unit).also { shapeCache[0] = size to it }
+            ?: memphisShapes(size, MEMPHIS_INTRO_SEED, unit).also { shapeCache[0] = size to it }
+        // Ze blijven daarna zweven en langzaam draaien (zelfde klok als het laadscherm).
+        val clock = memphisSeconds(startMs + time)
         shapes.forEachIndexed { i, m ->
             val p = phase(t, 150f + i * 45f, 150f + i * 45f + 380f)
-            drawMemphis(m, 0.42f * clamp01(p * 2f) * fade, unit, scale = easeOutBack(p, 2.6f))
+            drawMemphis(m, 0.42f * clamp01(p * 2f) * fade, unit, scale = easeOutBack(p, 2.6f), t = clock)
         }
 
         // Woordmerk: schuift van links binnen met een veer, daarna schuift de schaduw uit en komt de sticker.
@@ -340,5 +364,24 @@ fun RetroIntro(skip: Boolean, badge: String? = null, onDone: () -> Unit) {
             ),
             alpha = fade,
         )
+    }
+}
+
+/**
+ * Zwevende Memphis-vormen voor het laadscherm na de startanimatie: dezelfde vormen op dezelfde klok,
+ * dus ze bewegen naadloos door als de animatie wegvalt. Doet niets bij de Horizon-huisstijl.
+ */
+@Composable
+fun MovingMemphis(modifier: Modifier = Modifier, alpha: Float = 0.3f, seed: Int = MEMPHIS_INTRO_SEED) {
+    if (!HorizonColors.retro) return
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) { while (true) frame = withFrameMillis { it } }
+    val cache = remember { arrayOfNulls<Pair<Size, List<MemphisShape>>>(1) }
+    Canvas(modifier.fillMaxSize()) {
+        val unit = density
+        val shapes = cache[0]?.takeIf { it.first == size }?.second
+            ?: memphisShapes(size, seed, unit).also { cache[0] = size to it }
+        val t = memphisSeconds(frame)
+        shapes.forEach { drawMemphis(it, alpha, unit, t = t) }
     }
 }

@@ -83,6 +83,7 @@ import kotlinx.coroutines.delay
 import nl.thuis.launcher.bios.BiosButton
 import nl.thuis.launcher.bios.HorizonColors
 import nl.thuis.launcher.bios.HorizonIntro
+import nl.thuis.launcher.bios.MovingMemphis
 import nl.thuis.launcher.bios.memphis
 import nl.thuis.launcher.bios.HorizonLogo
 import nl.thuis.launcher.bios.LoadingScreen
@@ -137,7 +138,7 @@ private fun TvAppContent(a: TvActivity) {
         when (val s = state) {
             LiveState.NotConfigured -> Prompt("${a.flavor.name} is nog niet ingesteld", "Vul de gegevens van je IPTV-aanbieder in (dezelfde als in TiviMate).", "Instellingen") { a.settingsOpen = true }
             is LiveState.Error -> Prompt("Er ging iets mis", s.message, "Opnieuw") { a.recreate() }
-            is LiveState.Loading -> Box(Modifier.fillMaxSize().background(HorizonColors.Background).memphis()) { LoadingScreen(s.phase, null, 0, badge = badge, unit = "zenders") }
+            is LiveState.Loading -> Box(Modifier.fillMaxSize().background(HorizonColors.Background)) { MovingMemphis(); LoadingScreen(s.phase, null, 0, badge = badge, unit = "zenders") }
             is LiveState.Ready -> {}
         }
 
