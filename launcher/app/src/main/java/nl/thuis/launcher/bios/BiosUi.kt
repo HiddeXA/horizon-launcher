@@ -78,15 +78,76 @@ import coil3.compose.AsyncImage
  * Huisstijl Horizon, "Deep Space / Twilight": rustig, chic en premium.
  * Inktblauw als basis, donker marineblauw voor vlakken, zacht hemelsblauw als accent.
  */
+/**
+ * Een kleurenset. Horizon en Horizon TV gebruiken [Twilight]; Roze Hoek gebruikt [Roze90s].
+ * [retro] = true schakelt ook het 90s-logo, de Memphis-patronen en de 90s-startanimatie in.
+ */
+data class HorizonPalette(
+    val background: Color,
+    val surface: Color,
+    val surfaceHigh: Color,
+    val accent: Color,
+    val mint: Color,
+    val text: Color,
+    val dim: Color,
+    val onAccent: Color,
+    /** Extra 90s-kleuren (alleen gebruikt als [retro]). */
+    val pop: Color = accent,
+    val violet: Color = mint,
+    val retro: Boolean = false,
+    /** Het woord in het logo. */
+    val wordmark: String = "Horizon",
+) {
+    companion object {
+        /** Deep Space / Twilight: de Horizon-huisstijl. */
+        val Twilight = HorizonPalette(
+            background = Color(0xFF0B132B),   // inktblauw
+            surface = Color(0xFF1C2541),      // donker marineblauw (kaarten, kaders)
+            surfaceHigh = Color(0xFF26315A),  // iets lichter, voor knoppen zonder focus
+            accent = Color(0xFF48CAE4),       // zacht hemelsblauw
+            mint = Color(0xFF5BC0BE),         // mintgoud
+            text = Color(0xFFE0E1DD),         // off-white
+            dim = Color(0xFF9AA3B8),          // gedempte tekst, blauwgrijs
+            onAccent = Color(0xFF0B132B),     // tekst op een accentvlak
+        )
+
+        /** Roze Hoek: 90s-roze (hot pink met turquoise, citroengeel en paars, zoals Memphis-design). */
+        val Roze90s = HorizonPalette(
+            background = Color(0xFF1E0A1E),   // diep pruim
+            surface = Color(0xFF3A1236),      // donker framboos
+            surfaceHigh = Color(0xFF52194C),
+            accent = Color(0xFFFF3EA5),       // hot pink
+            mint = Color(0xFF2DE2C8),         // turquoise
+            text = Color(0xFFFFF0F7),         // roze-wit
+            dim = Color(0xFFD29BBE),          // zacht oudroze
+            onAccent = Color(0xFF1E0A1E),
+            pop = Color(0xFFFFE14D),          // citroengeel
+            violet = Color(0xFF9B5CFF),       // paars
+            retro = true,
+            wordmark = "Roze Hoek",
+        )
+    }
+}
+
+/**
+ * De kleuren van het huidige scherm. Elke activity zet bij het starten en terugkomen zijn eigen
+ * [palette] (Horizon/Horizon TV: Twilight, Roze Hoek: Roze90s). Omdat het Compose-state is, kleurt
+ * alles direct mee om. Alle bestaande HorizonColors.X-aanroepen blijven gewoon werken.
+ */
 object HorizonColors {
-    val Background = Color(0xFF0B132B)   // inktblauw
-    val Surface = Color(0xFF1C2541)      // donker marineblauw (kaarten, kaders)
-    val SurfaceHigh = Color(0xFF26315A)  // iets lichter, voor knoppen zonder focus
-    val Accent = Color(0xFF48CAE4)       // zacht hemelsblauw
-    val Mint = Color(0xFF5BC0BE)         // mintgoud
-    val Text = Color(0xFFE0E1DD)         // off-white
-    val Dim = Color(0xFF9AA3B8)          // gedempte tekst, blauwgrijs
-    val OnAccent = Color(0xFF0B132B)     // tekst op een accentvlak
+    var palette by mutableStateOf(HorizonPalette.Twilight)
+
+    val Background get() = palette.background
+    val Surface get() = palette.surface
+    val SurfaceHigh get() = palette.surfaceHigh
+    val Accent get() = palette.accent
+    val Mint get() = palette.mint
+    val Text get() = palette.text
+    val Dim get() = palette.dim
+    val OnAccent get() = palette.onAccent
+    val Pop get() = palette.pop
+    val Violet get() = palette.violet
+    val retro get() = palette.retro
 }
 
 val Poppins = FontFamily(

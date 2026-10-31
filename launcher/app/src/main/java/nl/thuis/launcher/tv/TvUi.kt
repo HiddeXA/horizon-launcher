@@ -83,6 +83,7 @@ import kotlinx.coroutines.delay
 import nl.thuis.launcher.bios.BiosButton
 import nl.thuis.launcher.bios.HorizonColors
 import nl.thuis.launcher.bios.HorizonIntro
+import nl.thuis.launcher.bios.memphis
 import nl.thuis.launcher.bios.HorizonLogo
 import nl.thuis.launcher.bios.LoadingScreen
 import java.time.Instant
@@ -136,7 +137,7 @@ private fun TvAppContent(a: TvActivity) {
         when (val s = state) {
             LiveState.NotConfigured -> Prompt("${a.flavor.name} is nog niet ingesteld", "Vul de gegevens van je IPTV-aanbieder in (dezelfde als in TiviMate).", "Instellingen") { a.settingsOpen = true }
             is LiveState.Error -> Prompt("Er ging iets mis", s.message, "Opnieuw") { a.recreate() }
-            is LiveState.Loading -> Box(Modifier.fillMaxSize().background(HorizonColors.Background)) { LoadingScreen(s.phase, null, 0, badge = badge, unit = "zenders") }
+            is LiveState.Loading -> Box(Modifier.fillMaxSize().background(HorizonColors.Background).memphis()) { LoadingScreen(s.phase, null, 0, badge = badge, unit = "zenders") }
             is LiveState.Ready -> {}
         }
 
@@ -182,7 +183,7 @@ private fun TvAppContent(a: TvActivity) {
 private fun Prompt(title: String, body: String, button: String, onClick: () -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { delay(250); runCatching { focus.requestFocus() } }
-    Box(Modifier.fillMaxSize().background(HorizonColors.Background), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().background(HorizonColors.Background).memphis(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             HorizonLogo(Modifier.height(56.dp), badge = LocalTvFlavor.current.badge)
             Text(title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = HorizonColors.Text, modifier = Modifier.padding(top = 28.dp))
@@ -313,7 +314,7 @@ private fun ChannelList(a: TvActivity, lineup: LiveLineup, now: Long) {
     Box(
         Modifier.fillMaxSize().background(
             Brush.horizontalGradient(0f to HorizonColors.Background.copy(alpha = 0.97f), 0.5f to HorizonColors.Background.copy(alpha = 0.9f), 0.68f to Color.Transparent)
-        )
+        ).memphis(alpha = 0.12f, seed = 7, widthFraction = 0.5f)
     ) {
         Column(Modifier.fillMaxHeight().padding(start = 40.dp, top = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

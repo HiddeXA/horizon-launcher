@@ -179,6 +179,11 @@ fun HorizonLogo(modifier: Modifier = Modifier, showWord: Boolean = true, badge: 
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
     ) {
         val h = size.height
+        // Roze Hoek: 90s-woordmerk met sticker, in hetzelfde vak als het Horizon-logo.
+        if (showWord && HorizonColors.retro) {
+            drawRetroWordmark(measurer, badge, 0f, h / 2f, h, size.width)
+            return@Canvas
+        }
         planet(Offset(h * 0.5f, h * 0.5f), h * 0.29f, LogoState(), HorizonColors.Accent, HorizonColors.Mint)
         if (showWord) {
             val layout = measurer.measure(WORD, wordStyle(h * 0.56f, density))
@@ -211,6 +216,7 @@ private const val EXIT_MS = 420L
  */
 @Composable
 fun HorizonIntro(skip: Boolean, badge: String? = null, onDone: () -> Unit) {
+    if (HorizonColors.retro) { RetroIntro(skip, badge, onDone); return }
     val measurer = rememberTextMeasurer()
     val stars = remember {
         val rnd = Random(11)

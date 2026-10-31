@@ -35,6 +35,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import nl.thuis.launcher.bios.HorizonColors
+import nl.thuis.launcher.bios.HorizonPalette
 import nl.thuis.launcher.bios.HorizonTheme
 
 enum class TvMode { WATCH, LIST, GUIDE }
@@ -51,10 +53,12 @@ class TvFlavor(
     val epg: EpgStore,
     val prefsName: String,
     val tag: String,
+    /** Kleuren en stijl: Horizon-huisstijl of de 90s-roze stijl van Roze Hoek. */
+    val palette: HorizonPalette,
 ) {
     companion object {
-        val TV = TvFlavor("Horizon TV", "TV", LiveRepo.tv, EpgStore.tv, "horizon-tv", "HorizonTV")
-        val ROZE = TvFlavor("Roze Hoek", "18+", LiveRepo.roze, EpgStore.roze, "roze-hoek", "RozeHoek")
+        val TV = TvFlavor("Horizon TV", "TV", LiveRepo.tv, EpgStore.tv, "horizon-tv", "HorizonTV", HorizonPalette.Twilight)
+        val ROZE = TvFlavor("Roze Hoek", "18+", LiveRepo.roze, EpgStore.roze, "roze-hoek", "RozeHoek", HorizonPalette.Roze90s)
     }
 }
 
@@ -106,6 +110,7 @@ open class TvActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        HorizonColors.palette = flavor.palette
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = LivePrefs(this, flavor.prefsName)
         playerView = PlayerView(this).apply {
@@ -369,6 +374,8 @@ open class TvActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Horizon en Roze Hoek delen het kleurenpalet; bij terugkomen weer het eigen palet zetten.
+        HorizonColors.palette = flavor.palette
         if (lastStopped > 0 && SystemClock.elapsedRealtime() - lastStopped > INTRO_AFTER_MS) showIntro()
         if (stopped) {
             stopped = false

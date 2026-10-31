@@ -106,7 +106,7 @@
             android:label="Roze Hoek - Inspired By Eppie Bos"
             android:icon="@drawable/roze_hoek_banner"
             android:banner="@drawable/roze_hoek_banner"
-            android:theme="@style/Theme.Horizon"
+            android:theme="@style/Theme.RozeHoek"
             android:launchMode="singleTask"
             android:taskAffinity="nl.thuis.rozehoek"
             android:excludeFromRecents="true"

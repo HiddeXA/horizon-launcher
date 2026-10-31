@@ -45,6 +45,7 @@ class BiosActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        HorizonColors.palette = HorizonPalette.Twilight   // Roze Hoek kan het palet op roze hebben gezet
         // Startanimatie bij een koude start, behalve als we vanuit de launcher met een zoekopdracht komen.
         if (intent?.getStringExtra(EXTRA_SEARCH) == null && intent?.getBooleanExtra("probe", false) != true && intent?.getBooleanExtra("probelive", false) != true) showIntro()
         handle(intent)
@@ -65,6 +66,7 @@ class BiosActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        HorizonColors.palette = HorizonPalette.Twilight
         // Na een tijd niet gebruikt: opnieuw de startanimatie.
         if (lastStopped > 0 && SystemClock.elapsedRealtime() - lastStopped > INTRO_AFTER_MS) showIntro()
     }

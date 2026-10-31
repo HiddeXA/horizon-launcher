@@ -10,4 +10,9 @@
     <style name="Theme.Horizon" parent="Theme.Thuis">
         <item name="android:windowBackground">#0B132B</item>
     </style>
+
+    <!-- Roze Hoek: diep pruim vanaf het eerste beeld (90s-roze stijl) -->
+    <style name="Theme.RozeHoek" parent="Theme.Horizon">
+        <item name="android:windowBackground">#1E0A1E</item>
+    </style>
 </resources>
