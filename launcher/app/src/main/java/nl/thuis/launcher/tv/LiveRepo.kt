@@ -46,20 +46,20 @@ sealed interface LiveState {
 }
 
 /**
- * Live-tv uit je Xtream-aanbod: zenders, categorieën, favorieten, laatst gekeken en de stream-adressen.
- * De zenderlijst wordt op het kastje bewaard (direct beschikbaar bij opstarten) en elke 12 uur ververst.
- * Wachtwoord en stream-adressen worden nooit gelogd.
+ * Live-tv uit je Xtream-aanbod: inloggen, de stream-adressen en de gedeelde verbinding.
+ * De zenderlijsten zelf zitten in [LiveSource]: één voor Horizon TV ([tv], zonder 18+) en één voor
+ * Roze Hoek ([roze], alleen 18+). Wachtwoord en stream-adressen worden nooit gelogd.
  */
 object LiveRepo {
-    private const val TAG = "HorizonTV"
-    private const val CACHE_FILE = "live-lineup-v1.json"
-    private const val CACHE_MS = 12 * 60 * 60 * 1000L
-
     val config: XtreamConfig? get() = Bios.config
 
-    private val _state = MutableStateFlow<LiveState>(if (config == null) LiveState.NotConfigured else LiveState.Loading("Zenders laden…"))
-    val state: StateFlow<LiveState> = _state
-    val lineup: LiveLineup? get() = (state.value as? LiveState.Ready)?.lineup
+    /** Horizon TV: alle zenders behalve volwassenen-zenders. */
+    val tv = LiveSource(adultOnly = false, cacheFile = "live-lineup-v1.json")
+    /** Roze Hoek: alleen de volwassenen-zenders. */
+    val roze = LiveSource(adultOnly = true, cacheFile = "roze-lineup-v1.json")
+
+    /** Na nieuwe inloggegevens: beide zenderlijsten opnieuw ophalen. */
+    fun resetAll(context: Context) { tv.reset(context); roze.reset(context) }
 
     /** Tijdzone van de server (voor terugkijken); de aanbieder geeft hem bij het inloggen. */
     @Volatile var serverZone: ZoneId = ZoneId.systemDefault()
@@ -68,50 +68,6 @@ object LiveRepo {
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
-
-    private val mutex = Mutex()
-
-    fun reset(context: Context) {
-        File(context.filesDir, CACHE_FILE).delete()
-        _state.value = if (config == null) LiveState.NotConfigured else LiveState.Loading("Zenders laden…")
-    }
-
-    suspend fun load(context: Context, force: Boolean = false) {
-        val cfg = config ?: run { _state.value = LiveState.NotConfigured; return }
-        mutex.withLock {
-            val file = File(context.filesDir, CACHE_FILE)
-            if (lineup == null && file.exists()) {
-                runCatching { withContext(Dispatchers.IO) { readCache(file) } }
-                    .onSuccess { _state.value = LiveState.Ready(it); Log.i(TAG, "Zenders uit opslag: ${it.channels.size}") }
-                    .onFailure { Log.w(TAG, "Zenderopslag onleesbaar: ${it.javaClass.simpleName}") }
-                if (!force && lineup != null && System.currentTimeMillis() - file.lastModified() < CACHE_MS) {
-                    // Wel even de tijdzone van de server ophalen (licht verzoek), op de achtergrond.
-                    runCatching { withContext(Dispatchers.IO) { login(cfg) } }
-                    return
-                }
-            }
-            try {
-                val show = lineup == null
-                val t0 = System.currentTimeMillis()
-                val l = withContext(Dispatchers.IO) {
-                    if (show) _state.value = LiveState.Loading("Inloggen bij je aanbieder…")
-                    login(cfg)
-                    if (show) _state.value = LiveState.Loading("Zenders ophalen…")
-                    val cats = fetchCategories(cfg)
-                    val chans = fetchChannels(cfg, cats.associateBy { it.id })
-                    LiveLineup(cats, chans).also { writeCache(file, it) }
-                }
-                _state.value = LiveState.Ready(l)
-                Log.i(TAG, "Zenders via aanbieder: ${l.channels.size} in ${System.currentTimeMillis() - t0} ms")
-            } catch (e: Exception) {
-                Log.w(TAG, "Zenders laden mislukt: ${e.javaClass.simpleName}")
-                if (lineup == null) _state.value = LiveState.Error(
-                    if (e is AuthException) "Inloggen bij je aanbieder mislukt. Controleer je gegevens bij Instellingen."
-                    else "Je aanbieder is niet bereikbaar. Probeer het zo opnieuw."
-                )
-            }
-        }
-    }
 
     // --- Stream-adressen ---
 
@@ -135,9 +91,9 @@ object LiveRepo {
         .addQueryParameter("username", c.user)
         .addQueryParameter("password", c.pass)
 
-    private class AuthException : IOException("auth")
+    internal class AuthException : IOException("auth")
 
-    private fun login(c: XtreamConfig) {
+    internal fun login(c: XtreamConfig) {
         http.newCall(Request.Builder().url(api(c).build()).build()).execute().use { r ->
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
             val o = JSONObject(r.body!!.string())
@@ -148,23 +104,84 @@ object LiveRepo {
         }
     }
 
-    private fun isAdultName(n: String) = n.contains("XXX", true) || n.contains("ADULT", true) || n.contains("18+")
+    /** Herkent volwassenen-zenders en -categorieën aan hun naam (naast de vlag is_adult van de aanbieder). */
+    fun isAdultName(n: String) = n.contains("XXX", true) || n.contains("ADULT", true) || n.contains("18+")
+}
+
+/**
+ * Eén zenderlijst. [adultOnly] = false laat volwassenen-zenders weg (Horizon TV),
+ * true houdt alléén die over (Roze Hoek). Op het kastje bewaard en elke 12 uur ververst.
+ */
+class LiveSource(val adultOnly: Boolean, private val cacheFile: String) {
+    private companion object { const val CACHE_MS = 12 * 60 * 60 * 1000L }
+
+    private val tag = if (adultOnly) "RozeHoek" else "HorizonTV"
+
+    // Let op: hier Bios.config en niet LiveRepo.config, want deze objecten worden gemaakt terwijl LiveRepo nog opstart.
+    private val _state = MutableStateFlow<LiveState>(if (Bios.config == null) LiveState.NotConfigured else LiveState.Loading("Zenders laden…"))
+    val state: StateFlow<LiveState> = _state
+    val lineup: LiveLineup? get() = (state.value as? LiveState.Ready)?.lineup
+
+    private val mutex = Mutex()
+    private val http get() = LiveRepo.http
+
+    fun reset(context: Context) {
+        File(context.filesDir, cacheFile).delete()
+        _state.value = if (Bios.config == null) LiveState.NotConfigured else LiveState.Loading("Zenders laden…")
+    }
+
+    suspend fun load(context: Context, force: Boolean = false) {
+        val cfg = Bios.config ?: run { _state.value = LiveState.NotConfigured; return }
+        mutex.withLock {
+            val file = File(context.filesDir, cacheFile)
+            if (lineup == null && file.exists()) {
+                runCatching { withContext(Dispatchers.IO) { readCache(file) } }
+                    .onSuccess { _state.value = LiveState.Ready(it); Log.i(tag, "Zenders uit opslag: ${it.channels.size}") }
+                    .onFailure { Log.w(tag, "Zenderopslag onleesbaar: ${it.javaClass.simpleName}") }
+                if (!force && lineup != null && System.currentTimeMillis() - file.lastModified() < CACHE_MS) {
+                    // Wel even de tijdzone van de server ophalen (licht verzoek), op de achtergrond.
+                    runCatching { withContext(Dispatchers.IO) { LiveRepo.login(cfg) } }
+                    return
+                }
+            }
+            try {
+                val show = lineup == null
+                val t0 = System.currentTimeMillis()
+                val l = withContext(Dispatchers.IO) {
+                    if (show) _state.value = LiveState.Loading("Inloggen bij je aanbieder…")
+                    LiveRepo.login(cfg)
+                    if (show) _state.value = LiveState.Loading("Zenders ophalen…")
+                    val cats = fetchCategories(cfg)
+                    val chans = fetchChannels(cfg, cats.associateBy { it.id })
+                    LiveLineup(cats, chans).also { writeCache(file, it) }
+                }
+                _state.value = LiveState.Ready(l)
+                Log.i(tag, "Zenders via aanbieder: ${l.channels.size} in ${System.currentTimeMillis() - t0} ms")
+            } catch (e: Exception) {
+                Log.w(tag, "Zenders laden mislukt: ${e.javaClass.simpleName}")
+                if (lineup == null) _state.value = LiveState.Error(
+                    if (e is LiveRepo.AuthException) "Inloggen bij je aanbieder mislukt. Controleer je gegevens bij Instellingen."
+                    else "Je aanbieder is niet bereikbaar. Probeer het zo opnieuw."
+                )
+            }
+        }
+    }
 
     private fun fetchCategories(c: XtreamConfig): List<LiveCategory> {
-        val url = api(c).addQueryParameter("action", "get_live_categories").build()
+        val url = LiveRepo.api(c).addQueryParameter("action", "get_live_categories").build()
         http.newCall(Request.Builder().url(url).build()).execute().use { r ->
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
             val arr = org.json.JSONArray(r.body!!.string())
             return (0 until arr.length()).map { arr.getJSONObject(it) }.map {
                 val raw = it.optString("category_name")
                 val (region, name) = ChannelNames.category(raw)
-                LiveCategory(it.optString("category_id"), name.ifBlank { raw.trim() }, region, isAdultName(raw))
+                LiveCategory(it.optString("category_id"), name.ifBlank { raw.trim() }, region, LiveRepo.isAdultName(raw))
             }
         }
     }
 
     private fun fetchChannels(c: XtreamConfig, cats: Map<String, LiveCategory>): List<LiveChannel> {
-        val url = api(c).addQueryParameter("action", "get_live_streams").build()
+        val url = LiveRepo.api(c).addQueryParameter("action", "get_live_streams").build()
         http.newCall(Request.Builder().url(url).build()).execute().use { r ->
             if (!r.isSuccessful) throw IOException("HTTP ${r.code}")
             JsonReader(InputStreamReader(r.body!!.byteStream(), Charsets.UTF_8)).use { jr ->
@@ -192,13 +209,15 @@ object LiveRepo {
                     jr.endObject()
                     if (id == 0) continue
                     val category = cats[cat]
-                    if (adult || category?.adult == true || isAdultName(raw)) continue   // standaard verborgen
+                    // Horizon TV laat volwassenen-zenders weg; Roze Hoek houdt alleen die over.
+                    val isAdult = adult || category?.adult == true || LiveRepo.isAdultName(raw)
+                    if (isAdult != adultOnly) continue
                     val (region, name) = ChannelNames.split(raw)
                     out += LiveChannel(
                         id = id, num = num, name = ChannelNames.titleCase(name).ifBlank { raw.trim() }, region = region,
                         logo = logo, epgId = epg?.lowercase(), categoryId = cat,
                         archiveDays = if (archive == 1) archiveDays.coerceAtLeast(1) else 0,
-                        radio = type == "radio_streams", adult = false,
+                        radio = type == "radio_streams", adult = adultOnly,
                     )
                 }
                 jr.endArray()
@@ -220,7 +239,7 @@ object LiveRepo {
         val tmp = File(file.parentFile, file.name + ".tmp")
         JsonWriter(OutputStreamWriter(tmp.outputStream().buffered(), Charsets.UTF_8)).use { w ->
             w.beginObject()
-            w.name("tz").value(serverZone.id)
+            w.name("tz").value(LiveRepo.serverZone.id)
             w.name("c").beginArray()
             l.categories.forEach { w.beginArray().value(it.id).value(it.name).value(it.region).value(it.adult).endArray() }
             w.endArray()
@@ -240,7 +259,7 @@ object LiveRepo {
         JsonReader(InputStreamReader(file.inputStream().buffered(64 * 1024), Charsets.UTF_8)).use { r ->
             r.beginObject()
             while (r.hasNext()) when (r.nextName()) {
-                "tz" -> r.str()?.let { tz -> runCatching { serverZone = ZoneId.of(tz) } }
+                "tz" -> r.str()?.let { tz -> runCatching { LiveRepo.serverZone = ZoneId.of(tz) } }
                 "c" -> { r.beginArray(); while (r.hasNext()) { r.beginArray(); cats += LiveCategory(r.nextString(), r.nextString(), r.str(), r.nextBoolean()); r.endArray() }; r.endArray() }
                 "s" -> {
                     r.beginArray()
@@ -248,7 +267,7 @@ object LiveRepo {
                         r.beginArray()
                         chans += LiveChannel(
                             id = r.nextInt(), num = r.nextInt(), name = r.nextString(), region = r.str(), logo = r.str(),
-                            epgId = r.str(), categoryId = r.nextString(), archiveDays = r.nextInt(), radio = r.nextBoolean(), adult = false,
+                            epgId = r.str(), categoryId = r.nextString(), archiveDays = r.nextInt(), radio = r.nextBoolean(), adult = adultOnly,
                         )
                         r.endArray()
                     }
@@ -263,8 +282,8 @@ object LiveRepo {
 }
 
 /** Favorieten, laatst gekeken en de laatste zender: klein, dus in SharedPreferences. */
-class LivePrefs(context: Context) {
-    private val prefs = context.getSharedPreferences("horizon-tv", Context.MODE_PRIVATE)
+class LivePrefs(context: Context, name: String = "horizon-tv") {
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
 
     val favorites = mutableStateListOf<Int>().apply { addAll(ids("fav")) }
     val recent = mutableStateListOf<Int>().apply { addAll(ids("recent")) }

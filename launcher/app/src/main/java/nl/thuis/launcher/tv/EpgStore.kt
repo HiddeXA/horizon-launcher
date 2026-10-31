@@ -84,10 +84,7 @@ class ChannelGuide(val programmes: List<Programme>) {
  * Alleen titels en tijden van zenders in je lijst blijven in het geheugen; omschrijvingen
  * worden per zender opgehaald als je ze bekijkt. Bewaard op het kastje, ververst na 8 uur.
  */
-object EpgStore {
-    private const val TAG = "HorizonTV"
-    private const val FILE = "live-epg-v1.bin"
-    private const val REFRESH_MS = 8 * 60 * 60 * 1000L
+class EpgStore(private val fileName: String) {
 
     @Volatile private var guides: Map<String, ChannelGuide> = emptyMap()
     private val _version = MutableStateFlow(0)
@@ -98,7 +95,7 @@ object EpgStore {
     fun guide(ch: LiveChannel?): ChannelGuide? = ch?.epgId?.let { guides[it] }
 
     suspend fun load(context: Context, lineup: LiveLineup) = mutex.withLock {
-        val file = File(context.filesDir, FILE)
+        val file = File(context.filesDir, fileName)
         if (guides.isEmpty() && file.exists()) {
             runCatching { withContext(Dispatchers.IO) { readBin(file) } }
                 .onSuccess { guides = it; _version.value++; Log.i(TAG, "Gids uit opslag: ${it.size} zenders") }
@@ -197,10 +194,20 @@ object EpgStore {
         }
     }
 
-    // --- Omschrijvingen en archief per zender (op aanvraag) ---
-
     /** Programma met omschrijving en of het terug te kijken is (van de aanbieder, per zender). */
     data class Detail(val start: Long, val end: Long, val title: String, val description: String?, val archive: Boolean)
+
+    companion object {
+    private const val TAG = "HorizonTV"
+    private const val REFRESH_MS = 8 * 60 * 60 * 1000L
+
+    /** Gids van Horizon TV. */
+    val tv = EpgStore("live-epg-v1.bin")
+    /** Gids van Roze Hoek (alleen de 18+-zenders), apart bewaard zodat de twee elkaar niet overschrijven. */
+    val roze = EpgStore("roze-epg-v1.bin")
+
+    // --- Omschrijvingen en archief per zender (op aanvraag; los van welke gids) ---
+
 
     private val details = LruCache<Int, List<Detail>>(24)
 
@@ -226,4 +233,5 @@ object EpgStore {
 
     /** Gids voor een zender zonder XMLTV-gegevens: uit de details van de aanbieder. */
     fun guideFromDetails(list: List<Detail>) = ChannelGuide(list.map { Programme(it.start, it.end, it.title) })
+}
 }

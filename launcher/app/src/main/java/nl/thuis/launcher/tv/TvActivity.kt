@@ -40,6 +40,25 @@ import nl.thuis.launcher.bios.HorizonTheme
 enum class TvMode { WATCH, LIST, GUIDE }
 
 /**
+ * Welke live-tv-app dit is. Horizon TV en Roze Hoek delen speler, zenderlijst en gids,
+ * maar hebben elk hun eigen zenders, gids-opslag, favorieten en naam.
+ */
+class TvFlavor(
+    val name: String,
+    /** Label naast het Horizon-logo (startanimatie, laadscherm, zenderlijst, gids). */
+    val badge: String,
+    val source: LiveSource,
+    val epg: EpgStore,
+    val prefsName: String,
+    val tag: String,
+) {
+    companion object {
+        val TV = TvFlavor("Horizon TV", "TV", LiveRepo.tv, EpgStore.tv, "horizon-tv", "HorizonTV")
+        val ROZE = TvFlavor("Roze Hoek", "18+", LiveRepo.roze, EpgStore.roze, "roze-hoek", "RozeHoek")
+    }
+}
+
+/**
  * Horizon TV: live-tv uit je Xtream-aanbod, in de Horizon-huisstijl.
  *
  * Opent direct op de laatst bekeken zender (de startanimatie speelt terwijl de zender al laadt).
@@ -49,7 +68,12 @@ enum class TvMode { WATCH, LIST, GUIDE }
  * Je abonnement staat één stream tegelijk toe: bij zappen wordt de vorige stream eerst gestopt,
  * en bij het verlaten van de app stopt de stream meteen.
  */
-class TvActivity : ComponentActivity() {
+open class TvActivity : ComponentActivity() {
+
+    /** Horizon TV; [RozeHoekActivity] zet dit op Roze Hoek. */
+    open val flavor: TvFlavor get() = TvFlavor.TV
+    val repo: LiveSource get() = flavor.source
+    val epg: EpgStore get() = flavor.epg
 
     // --- Toestand voor de interface (Compose leest deze direct) ---
     var mode by mutableStateOf(TvMode.WATCH)
@@ -83,7 +107,7 @@ class TvActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        prefs = LivePrefs(this)
+        prefs = LivePrefs(this, flavor.prefsName)
         playerView = PlayerView(this).apply {
             useController = false
             setShutterBackgroundColor(Color.BLACK)
@@ -96,14 +120,14 @@ class TvActivity : ComponentActivity() {
         setContent { HorizonTheme { TvApp(this) } }
 
         lifecycleScope.launch {
-            LiveRepo.load(this@TvActivity)
-            val l = LiveRepo.lineup ?: return@launch
+            repo.load(this@TvActivity)
+            val l = repo.lineup ?: return@launch
             if (current == null) startChannel(l)?.let { tune(it, immediate = true) }
-            EpgStore.load(this@TvActivity, l)
+            epg.load(this@TvActivity, l)
         }
         // Na nieuwe inloggegevens (instellingen): opnieuw beginnen.
         lifecycleScope.launch {
-            LiveRepo.state.collect { s ->
+            repo.state.collect { s ->
                 if (s is LiveState.Ready && current == null && !introVisible) startChannel(s.lineup)?.let { tune(it, immediate = true) }
             }
         }
@@ -137,32 +161,32 @@ class TvActivity : ComponentActivity() {
                         if (state == Player.STATE_READY) {
                             playerError = null
                             if (tuneStartedAt > 0) {
-                                Log.i("HorizonTV", "Zender in beeld na ${SystemClock.elapsedRealtime() - tuneStartedAt} ms${if (triedHls) " (HLS)" else ""}")
+                                Log.i(flavor.tag, "Zender in beeld na ${SystemClock.elapsedRealtime() - tuneStartedAt} ms${if (triedHls) " (HLS)" else ""}")
                                 tuneStartedAt = 0
                             }
                         }
                     }
                     override fun onPlayerError(error: PlaybackException) = handleError(error)
-                    override fun onRenderedFirstFrame() { Log.i("HorizonTV", "Eerste beeld getoond") }
-                    override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) { Log.i("HorizonTV", "Beeldformaat ${size.width}x${size.height}") }
+                    override fun onRenderedFirstFrame() { Log.i(flavor.tag, "Eerste beeld getoond") }
+                    override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) { Log.i(flavor.tag, "Beeldformaat ${size.width}x${size.height}") }
                     override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                         tracks.groups.forEach { g ->
                             for (i in 0 until g.length) {
                                 val f = g.getTrackFormat(i)
-                                Log.i("HorizonTV", "Spoor ${g.type}: ${f.sampleMimeType} ${f.codecs ?: ""} ${f.width}x${f.height} gekozen=${g.isTrackSelected(i)} ondersteund=${g.isTrackSupported(i)}")
+                                Log.i(flavor.tag, "Spoor ${g.type}: ${f.sampleMimeType} ${f.codecs ?: ""} ${f.width}x${f.height} gekozen=${g.isTrackSelected(i)} ondersteund=${g.isTrackSupported(i)}")
                             }
                         }
                     }
                 })
                 p.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
                     override fun onVideoCodecError(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, e: Exception) {
-                        Log.w("HorizonTV", "Videodecoder-fout: ${e.javaClass.simpleName}: ${e.message?.take(120)}")
+                        Log.w(flavor.tag, "Videodecoder-fout: ${e.javaClass.simpleName}: ${e.message?.take(120)}")
                     }
                     override fun onVideoDecoderInitialized(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, decoderName: String, initializedTimestampMs: Long, initializationDurationMs: Long) {
-                        Log.i("HorizonTV", "Videodecoder: $decoderName")
+                        Log.i(flavor.tag, "Videodecoder: $decoderName")
                     }
                     override fun onDroppedVideoFrames(eventTime: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) {
-                        Log.i("HorizonTV", "Weggevallen beelden: $droppedFrames in $elapsedMs ms")
+                        Log.i(flavor.tag, "Weggevallen beelden: $droppedFrames in $elapsedMs ms")
                     }
                 })
                 p.volume = if (introVisible) 0f else 1f
@@ -174,7 +198,7 @@ class TvActivity : ComponentActivity() {
 
     fun tune(ch: LiveChannel, immediate: Boolean = false, list: List<LiveChannel>? = null) {
         if (list != null) zapList = list
-        else if (zapList.none { it.id == ch.id }) zapList = LiveRepo.lineup?.byCategory?.get(ch.categoryId).orEmpty()
+        else if (zapList.none { it.id == ch.id }) zapList = repo.lineup?.byCategory?.get(ch.categoryId).orEmpty()
         if (current?.id != ch.id) previous = current
         current = ch
         catchup = null
@@ -219,12 +243,12 @@ class TvActivity : ComponentActivity() {
         val ch = current ?: return
         // Eerst nog een keer via HLS proberen; sommige zenders werken alleen zo.
         if (!triedHls) {
-            Log.i("HorizonTV", "TS lukt niet (${e.errorCodeName}), HLS proberen")
+            Log.i(flavor.tag, "TS lukt niet (${e.errorCodeName}), HLS proberen")
             val url = catchup?.let { LiveRepo.catchupUrl(ch, it, hls = true) } ?: LiveRepo.liveUrl(ch, hls = true)
             play(url, hls = true)
             return
         }
-        Log.w("HorizonTV", "Afspelen mislukt: ${e.errorCodeName}")
+        Log.w(flavor.tag, "Afspelen mislukt: ${e.errorCodeName}")
         val code = (e.cause as? HttpDataSource.InvalidResponseCodeException)?.responseCode
         playerError = when {
             code == 404 -> "Deze zender is nu niet beschikbaar."
@@ -258,7 +282,7 @@ class TvActivity : ComponentActivity() {
             delay(1_500)
             val n = digits.toIntOrNull()
             digits = ""
-            val ch = n?.let { LiveRepo.lineup?.byNum?.get(it) }
+            val ch = n?.let { repo.lineup?.byNum?.get(it) }
             if (ch != null) tune(ch, immediate = true) else showToast("Zender $n bestaat niet")
         }
     }
@@ -290,7 +314,7 @@ class TvActivity : ComponentActivity() {
             return true
         }
         if (settingsOpen || mode != TvMode.WATCH) return super.dispatchKeyEvent(event)
-        if (LiveRepo.lineup == null) return super.dispatchKeyEvent(event)
+        if (repo.lineup == null) return super.dispatchKeyEvent(event)
 
         val down = event.action == KeyEvent.ACTION_DOWN
         val code = event.keyCode

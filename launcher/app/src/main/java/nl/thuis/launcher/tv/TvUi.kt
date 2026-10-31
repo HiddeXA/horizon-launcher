@@ -36,6 +36,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -109,11 +111,20 @@ private fun rememberNow(): Long {
     return now
 }
 
+/** Welke app (Horizon TV of Roze Hoek): naam, logo-label en gids, voor onderdelen zonder toegang tot de activity. */
+val LocalTvFlavor = staticCompositionLocalOf { TvFlavor.TV }
+
 @Composable
 fun TvApp(a: TvActivity) {
-    val state by LiveRepo.state.collectAsState()
-    val epgVersion by EpgStore.version.collectAsState()
+    CompositionLocalProvider(LocalTvFlavor provides a.flavor) { TvAppContent(a) }
+}
+
+@Composable
+private fun TvAppContent(a: TvActivity) {
+    val state by a.repo.state.collectAsState()
+    val epgVersion by a.epg.version.collectAsState()
     val now = rememberNow()
+    val badge = a.flavor.badge
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         // Het beeld: schermvullend, of klein rechtsboven in de gids.
@@ -123,9 +134,9 @@ fun TvApp(a: TvActivity) {
 
         val lineup = (state as? LiveState.Ready)?.lineup
         when (val s = state) {
-            LiveState.NotConfigured -> Prompt("Horizon TV is nog niet ingesteld", "Vul de gegevens van je IPTV-aanbieder in (dezelfde als in TiviMate).", "Instellingen") { a.settingsOpen = true }
+            LiveState.NotConfigured -> Prompt("${a.flavor.name} is nog niet ingesteld", "Vul de gegevens van je IPTV-aanbieder in (dezelfde als in TiviMate).", "Instellingen") { a.settingsOpen = true }
             is LiveState.Error -> Prompt("Er ging iets mis", s.message, "Opnieuw") { a.recreate() }
-            is LiveState.Loading -> Box(Modifier.fillMaxSize().background(HorizonColors.Background)) { LoadingScreen(s.phase, null, 0, badge = "TV", unit = "zenders") }
+            is LiveState.Loading -> Box(Modifier.fillMaxSize().background(HorizonColors.Background)) { LoadingScreen(s.phase, null, 0, badge = badge, unit = "zenders") }
             is LiveState.Ready -> {}
         }
 
@@ -159,11 +170,11 @@ fun TvApp(a: TvActivity) {
         if (a.settingsOpen) {
             nl.thuis.launcher.ui.SettingsScreen(
                 onDismiss = { a.settingsOpen = false },
-                onSaved = { changed -> if (changed.any { it.name.startsWith("X") }) { LiveRepo.reset(a); a.recreate() } },
+                onSaved = { changed -> if (changed.any { it.name.startsWith("X") }) { LiveRepo.resetAll(a); a.recreate() } },
             )
         }
 
-        if (a.introVisible) HorizonIntro(skip = a.introSkip, badge = "TV") { a.introDone() }
+        if (a.introVisible) HorizonIntro(skip = a.introSkip, badge = badge) { a.introDone() }
     }
 }
 
@@ -173,7 +184,7 @@ private fun Prompt(title: String, body: String, button: String, onClick: () -> U
     LaunchedEffect(Unit) { delay(250); runCatching { focus.requestFocus() } }
     Box(Modifier.fillMaxSize().background(HorizonColors.Background), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            HorizonLogo(Modifier.height(56.dp), badge = "TV")
+            HorizonLogo(Modifier.height(56.dp), badge = LocalTvFlavor.current.badge)
             Text(title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = HorizonColors.Text, modifier = Modifier.padding(top = 28.dp))
             Text(body, fontSize = 15.sp, color = HorizonColors.Dim, modifier = Modifier.padding(top = 8.dp, bottom = 20.dp))
             BiosButton(button, Modifier.focusRequester(focus), primary = true, onClick = onClick)
@@ -216,7 +227,7 @@ private fun Progress(f: Float, modifier: Modifier, height: Dp = 4.dp) {
 
 @Composable
 private fun InfoBanner(ch: LiveChannel, catchup: Programme?, error: String?, buffering: Boolean, now: Long, favorite: Boolean) {
-    val guide = EpgStore.guide(ch)
+    val guide = LocalTvFlavor.current.epg.guide(ch)
     val cur = catchup ?: guide?.at(now)
     val next = if (catchup == null) guide?.next(now) else null
     Box(
@@ -306,7 +317,7 @@ private fun ChannelList(a: TvActivity, lineup: LiveLineup, now: Long) {
     ) {
         Column(Modifier.fillMaxHeight().padding(start = 40.dp, top = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                HorizonLogo(Modifier.height(26.dp), badge = "TV")
+                HorizonLogo(Modifier.height(26.dp), badge = a.flavor.badge)
                 Spacer(Modifier.width(18.dp))
                 Text(clock(now), fontSize = 15.sp, color = HorizonColors.Dim, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.width(18.dp))
@@ -380,7 +391,7 @@ private fun ChannelRow(
     ch: LiveChannel, now: Long, playing: Boolean, favorite: Boolean, modifier: Modifier,
     onClick: () -> Unit, onLongClick: () -> Unit,
 ) {
-    val p = EpgStore.guide(ch)?.at(now)
+    val p = LocalTvFlavor.current.epg.guide(ch)?.at(now)
     Surface(
         onClick = onClick, onLongClick = onLongClick,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
@@ -434,7 +445,7 @@ private fun Guide(a: TvActivity, lineup: LiveLineup, now: Long) {
         if (row < first + 1 || row > first + visible - 2) listState.animateScrollToItem((row - 2).coerceAtLeast(0))
     }
 
-    fun guideOf(ch: LiveChannel) = EpgStore.guide(ch)
+    fun guideOf(ch: LiveChannel) = a.epg.guide(ch)
     val selCh = channels.getOrNull(row)
     val selProg = selCh?.let { guideOf(it)?.at(cursor) }
 
@@ -504,7 +515,7 @@ private fun Guide(a: TvActivity, lineup: LiveLineup, now: Long) {
             // Bovenin: details van het geselecteerde programma (beeld staat rechts, in de activity).
             Column(Modifier.height(GV_H).padding(end = GV_W + 32.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    HorizonLogo(Modifier.height(24.dp), badge = "TV")
+                    HorizonLogo(Modifier.height(24.dp), badge = a.flavor.badge)
                     Spacer(Modifier.width(16.dp))
                     Text("Tv-gids · ${clock(now)}", fontSize = 13.sp, color = HorizonColors.Dim)
                     Spacer(Modifier.width(16.dp))

@@ -56,6 +56,7 @@ import nl.thuis.launcher.data.KeyTester
 import nl.thuis.launcher.data.Secrets
 import nl.thuis.launcher.data.Secrets.Key
 import nl.thuis.launcher.data.SetupServer
+import nl.thuis.launcher.tv.RozeHoek
 
 /**
  * Instellingen: API-sleutels en IPTV-inlog wijzigen, testen en opslaan op het kastje.
@@ -128,6 +129,8 @@ fun SettingsScreen(onDismiss: () -> Unit, onSaved: (Set<Key>) -> Unit) {
                 Field(Key.XSERVER, edits, null, keyboard = KeyboardType.Uri)
                 Field(Key.XUSER, edits, null)
                 Field(Key.XPASS, edits, results[Key.XPASS])
+                Section("Apps")
+                RozeHoekToggle()
 
             }
 
@@ -264,3 +267,35 @@ private fun SettingsButton(label: String, primary: Boolean = false, modifier: Mo
         ),
     ) { Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium) }
 }
+
+/** Schakelaar voor Roze Hoek (alleen 18+-zenders). Staat standaard uit; uit = geen tegel en niet te starten. */
+@Composable
+private fun RozeHoekToggle() {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(RozeHoek.isEnabled(context)) }
+    val shape = RoundedCornerShape(8.dp)
+    Column(Modifier.padding(vertical = 5.dp)) {
+        Text(RozeHoek.TITLE, fontSize = 13.sp, color = Palette.TextDim)
+        Surface(
+            onClick = { RozeHoek.setEnabled(context, !on); on = RozeHoek.isEnabled(context) },
+            shape = ClickableSurfaceDefaults.shape(shape),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = Palette.Surface, contentColor = Palette.Text,
+                focusedContainerColor = Palette.SurfaceFocused, focusedContentColor = Palette.Text,
+            ),
+            border = ClickableSurfaceDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Palette.Text), shape = shape)),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            modifier = Modifier.padding(top = 4.dp).fillMaxWidth(),
+        ) {
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Alleen 18+-zenders, met eigen tegel", fontSize = 16.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                Text(
+                    if (on) "AAN" else "UIT", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (on) RozePink else Palette.TextDim,
+                )
+            }
+        }
+    }
+}
+
+private val RozePink = Color(0xFFFF6FB5)
