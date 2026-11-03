@@ -12,11 +12,13 @@
 
 <p align="center">
   <b>Een eigen homescherm voor de Chromecast met Google TV, zonder advertenties en zonder gedoe.</b><br>
-  Met <b>Horizon</b> voor je films en <b>Horizon TV</b> voor live-tv met een echte tv-gids.
+  Met <b>Horizon</b> voor je films, <b>Horizon TV</b> voor live-tv met een echte tv-gids,<br>
+  en <b>Roze Hoek</b> voor de 18+-zenders, in 90s-stijl en standaard uit.
 </p>
 
 <p align="center">
   <a href="#-wat-zit-erin">Wat zit erin</a> ·
+  <a href="#-roze-hoek">Roze Hoek</a> ·
   <a href="#-aan-de-slag">Aan de slag</a> ·
   <a href="#-sleutels-en-privacy">Sleutels en privacy</a> ·
   <a href="#-techniek">Techniek</a> ·
@@ -35,7 +37,7 @@
 
 ## ✨ Wat zit erin
 
-Eén app-pakket met drie tegels op je tv. Alles is gebouwd met Kotlin en Jetpack Compose for TV, en volledig te bedienen met de afstandsbediening.
+Eén app-pakket met vier tegels op je tv (Roze Hoek staat standaard uit). Alles is gebouwd met Kotlin en Jetpack Compose for TV, en volledig te bedienen met de afstandsbediening.
 
 <table>
 <tr>
@@ -96,17 +98,59 @@ Live-tv met een tv-gids, gemaakt om snel te zappen.
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+<img src="docs/images/roze-hoek.png" alt="Roze Hoek op de tv, in de 90s-roze huisstijl">
+
+</td>
+<td width="50%" valign="top">
+
+### 💗 Roze Hoek
+*Inspired By Eppie Bos.* Live-tv met **alleen de 18+-zenders** uit je aanbod, in een eigen 90s-stijl.
+
+- **Standaard uit**: geen tegel en niet te starten. Aanzetten met de schakelaar bij *Instellingen → Apps*.
+- Zelfde speler, zenderlijst en tv-gids als Horizon TV, maar met **eigen favorieten** en een eigen gids.
+- Horizon TV laat deze zenders juist weg, dus ze lopen nooit door elkaar.
+- Herkent volwassenen-zenders aan de vlag `is_adult` van de aanbieder of aan "XXX", "ADULT" of "18+" in de naam.
+
+</td>
+</tr>
 </table>
 
-<sub>De afbeeldingen hierboven zijn schetsen in de echte huisstijl. Titels, zenders en programma's zijn verzonnen, zodat er geen beeldmateriaal van anderen in deze repository staat.</sub>
+<sub>De afbeeldingen van de launcher, Horizon en Horizon TV zijn schetsen in de echte huisstijl. Titels, zenders en programma's zijn verzonnen, zodat er geen beeldmateriaal van anderen in deze repository staat. Het beeld van Roze Hoek is een screenshot van de tv, zonder zenders.</sub>
 
 <p align="center">
   <img src="launcher/app/src/main/res/drawable-xhdpi/horizon_banner.png" alt="Tegel Horizon" width="320">
   &nbsp;
   <img src="launcher/app/src/main/res/drawable-xhdpi/horizon_tv_banner.png" alt="Tegel Horizon TV" width="320">
+  &nbsp;
+  <img src="launcher/app/src/main/res/drawable-xhdpi/roze_hoek_banner.png" alt="Tegel Roze Hoek" width="320">
   <br>
   <sub>De tegels zoals ze op het homescherm staan.</sub>
 </p>
+
+---
+
+## 💗 Roze Hoek
+
+<p align="center">
+  <img src="docs/images/roze-hoek-intro.gif" alt="Startanimatie van Roze Hoek: ▶ PLAY en een teller zoals op een videoband, Memphis-vormen die erin ploppen, het woord Roze Hoek met een 18+-sticker en de onderregel Inspired By Eppie Bos" width="720">
+  <br>
+  <sub>De startanimatie van Roze Hoek, opgenomen op het kastje.</sub>
+</p>
+
+Roze Hoek is een vierde app in hetzelfde pakket, voor de volwassenen-zenders uit je Xtream-aanbod. Hij staat **standaard uit**: zonder dat je hem aanzet is er geen tegel en kan hij ook niet gestart worden.
+
+**Aanzetten:** tandwiel in de launcher (of *Instellingen* in Horizon TV) → **Apps** → *Roze Hoek* op **AAN**. De tegel verschijnt direct in de launcher, en de stand blijft bewaard na een update. Uitzetten gaat op dezelfde plek.
+
+**90s-stijl**, in plaats van het blauw van Horizon:
+- Hot pink, turquoise, citroengeel en paars op een donkere pruimkleur.
+- Een woordmerk met schuine letters, een 3D-schaduw, een gele **18+**-sticker en de onderregel *Inspired By Eppie Bos*.
+- Memphis-figuurtjes (krulletjes, driehoekjes, puntjes, zigzags) die bij het opstarten zweven en draaien.
+- Een startanimatie als een videoband: *▶ PLAY*, een teller, een storingsstreep en beeldlijnen zoals op een oude beeldbuis-tv.
+
+Horizon en Horizon TV houden hun eigen blauwe huisstijl; bij het wisselen springen de kleuren mee.
 
 ---
 
@@ -185,7 +229,8 @@ horizon-launcher/
 │   ├── ui/        top shelf, tegels, menu's, filmscherm, instellingen
 │   ├── data/      TMDB en OMDb, aanbevelingen, sleutelopslag, instel-server
 │   ├── bios/      Horizon: catalogus, kijkprofiel, genres, speler, huisstijl en logo
-│   └── tv/        Horizon TV: zenders, tv-gids (XMLTV), speler en afstandsbediening
+│   │              (RetroBrand.kt: de 90s-stijl van Roze Hoek)
+│   └── tv/        Horizon TV en Roze Hoek: zenders, tv-gids (XMLTV), speler en afstandsbediening
 ├── launcher/app/src/test/            unit tests (titels, kijkprofiel, scores, zendernamen, gidstijden)
 └── docs/                             afbeeldingen voor deze pagina
 ```
@@ -226,7 +271,7 @@ Met `5-diagnose.cmd` voer je een testlijst uit op de tv zelf (toetsaanslagen, wa
 
 ## ⚖️ Disclaimer
 
-Dit project levert **geen films, zenders of streams**. Horizon en Horizon TV zijn alleen een weergave voor een Xtream-abonnement dat je zelf afsluit. Gebruik ze alleen met een aanbod waarvoor je de rechten hebt.
+Dit project levert **geen films, zenders of streams**. Horizon, Horizon TV en Roze Hoek zijn alleen een weergave voor een Xtream-abonnement dat je zelf afsluit. Gebruik ze alleen met een aanbod waarvoor je de rechten hebt.
 
 Dit project is niet verbonden aan Google, TMDB, OMDb, IMDb of Rotten Tomatoes. Dit product gebruikt de TMDB API, maar wordt niet door TMDB ondersteund of gecertificeerd.
 
