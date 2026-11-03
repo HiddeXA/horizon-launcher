@@ -79,13 +79,14 @@ class AppRepository(private val context: Context) {
     /** Banner in hoge resolutie (960x540) voor de grote kaart in de top shelf. */
     suspend fun heroBanner(app: AppEntry): ImageBitmap? {
         if (!app.isBanner) return null
-        heroCache.get(app.packageName)?.let { return it }
+        // Per scherm (pinKey), niet per pakket: Horizon, Horizon TV en Roze Hoek zitten in één pakket.
+        heroCache.get(app.pinKey)?.let { return it }
         return withContext(Dispatchers.Default) {
             runCatching {
                 val ai = pm.getActivityInfo(app.component, 0)
                 val d = ai.loadBanner(pm) ?: ai.applicationInfo.loadBanner(pm)
                 d?.toBitmap(960, 540)?.asImageBitmap()
-            }.getOrNull()?.also { heroCache.put(app.packageName, it) }
+            }.getOrNull()?.also { heroCache.put(app.pinKey, it) }
         }
     }
 

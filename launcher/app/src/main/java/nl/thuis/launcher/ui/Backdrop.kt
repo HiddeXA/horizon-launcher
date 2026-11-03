@@ -169,7 +169,7 @@ private fun AppStage(h: Highlight.App, loadHeroBanner: suspend (AppEntry) -> Ima
     }
     Stage(app.brand, app.glow) {
         if (app.isBanner) {
-            val big by produceState<ImageBitmap?>(null, app.packageName) { value = loadHeroBanner(app) }
+            val big by produceState<ImageBitmap?>(null, app.pinKey) { value = loadHeroBanner(app) }
             Image(
                 bitmap = big ?: app.image,
                 contentDescription = null,
