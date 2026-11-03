@@ -4,7 +4,7 @@
 
 # Horizon launcher
 
-Een eigen homescherm voor de **Chromecast met Google TV**, zonder advertenties. Eén app met vier onderdelen:
+Een eigen homescherm voor de **Chromecast met Google TV**, zonder advertenties, met drie apps erin. Alles zit in één installatie:
 
 - **Thuis-launcher**: het homescherm zelf, met je apps en filmaanbevelingen (TMDB, met scores via OMDb).
 - **Horizon**: de films uit je eigen Xtream-abonnement als overzichtelijke streamingapp, met zoeken, filters, Mijn lijst en Verder kijken.
@@ -12,6 +12,30 @@ Een eigen homescherm voor de **Chromecast met Google TV**, zonder advertenties. 
 - **Roze Hoek**: alleen de 18+-zenders uit je aanbod. Staat **standaard uit**; aanzetten via het tandwiel → *Apps*.
 
 Alles werkt met de afstandsbediening.
+
+## De apps
+
+### 🎬 Horizon (films)
+- Je filmaanbod uit Xtream als nette streamingapp, ook bij tienduizenden films. Na de eerste keer opent de catalogus in ongeveer 5 seconden.
+- Bovenaan **Nieuwe films** en een **Top 100** (best beoordeeld volgens TMDB, alleen wat in je aanbod zit).
+- Daarna **Verder kijken**, **Aanbevolen voor jou**, **Mijn lijst** en 18 genrerijen, gesorteerd op wat jij het meest kijkt.
+- **Zoeken** en **filteren** op genres, periode, minimale score en sortering.
+- Titels worden opgeschoond: geen landcodes, jaartallen of kwaliteitslabels in beeld.
+- Speler: links/rechts spoelt (ingedrukt houden gaat steeds sneller), omlaag kiest ondertitels (wordt onthouden). Lukt afspelen niet, dan biedt hij Kodi aan.
+
+### 📺 Horizon TV (live-tv)
+- Opent direct op de **laatst bekeken zender**.
+- **Zappen** met ▲▼, CH+/CH− of het zendernummer, in ongeveer 1 tot 2 seconden.
+- OK of ◄ opent de **zenderlijst** met categorieën, favorieten (lang OK) en wat er nu op is.
+- ► opent de **tv-gids** van 2,5 uur, met omschrijvingen. Bij zenders met archief kun je **terugkijken**.
+- Zuinig met je abonnement: bij doorzappen start een zender pas als je even stilstaat, en de stream stopt meteen als je de app verlaat.
+
+### 💗 Roze Hoek (18+)
+- Live-tv met **alleen de volwassenen-zenders** uit je aanbod, in een eigen 90s-stijl. Horizon TV laat deze zenders juist weg.
+- Zelfde speler, zenderlijst en tv-gids als Horizon TV, maar met eigen favorieten.
+- **Standaard uit**: geen tegel en niet te starten. Aanzetten (en weer uit) via het tandwiel in de launcher → *Apps* → *Roze Hoek*.
+
+De **launcher** zelf heeft rijen voor vastgezette apps, aanbevolen films en alle apps. Lang OK op een app geeft vastzetten, verschuiven of app-info.
 
 <p align="center">
   <img src="launcher/app/src/main/res/drawable-xhdpi/horizon_banner.png" alt="Tegel Horizon" width="260">
