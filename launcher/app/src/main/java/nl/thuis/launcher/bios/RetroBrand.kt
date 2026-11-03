@@ -86,16 +86,23 @@ internal fun DrawScope.drawRetroWordmark(
     taglineChars: Int = Int.MAX_VALUE, taglineCursor: Boolean = false,
 ) {
     val word = HorizonColors.palette.wordmark
-    val sw = if (badge != null) h * 0.86f else 0f
-    val gap = if (badge != null) h * 0.16f else 0f
-    val layout = fitWord(measurer, word, h, boxW - sw - gap - h * 0.12f, density)
+    // Met onderregel (alleen bij een groot logo) schuift het woord omhoog en wordt het iets kleiner,
+    // zodat woord + onderregel samen binnen de hoogte h passen (het logo wordt in een vak getekend
+    // en alles daarbuiten valt weg). Startanimatie en laadscherm gebruiken dezelfde indeling.
+    val tagline = HorizonColors.palette.tagline
+    val withTag = tagline != null && h >= 40f * density
+    val hw = if (withTag) h * 0.74f else h
+    val wcy = if (withTag) cy - h * 0.12f else cy
+    val sw = if (badge != null) hw * 0.86f else 0f
+    val gap = if (badge != null) hw * 0.16f else 0f
+    val layout = fitWord(measurer, word, hw, boxW - sw - gap - hw * 0.12f, density)
     val tw = layout.size.width.toFloat()
     val x0 = left + (boxW - (tw + gap + sw)) / 2f
-    val ty = cy - layout.size.height / 2f
+    val ty = wcy - layout.size.height / 2f
 
     if (wordAlpha > 0f) {
         // Getrapte schaduw (3D-letters zoals op een 90s-videohoes): paars achteraan, turquoise ervoor.
-        val step = h * 0.028f * shadow
+        val step = hw * 0.028f * shadow
         if (step > 0.1f) {
             for (k in 4 downTo 1) {
                 val c = if (k >= 3) HorizonColors.Violet else HorizonColors.Mint
@@ -112,13 +119,12 @@ internal fun DrawScope.drawRetroWordmark(
 
     // Onderregel "Inspired By Eppie Bos": turquoise, schuin, gecentreerd onder het woord.
     // Alleen bij een groot logo (startanimatie, laadscherm); in de kleine logo's past het niet.
-    val tagline = HorizonColors.palette.tagline
-    if (tagline != null && h >= 40f * density && wordAlpha > 0f && taglineChars > 0) {
+    if (withTag && tagline != null && wordAlpha > 0f && taglineChars > 0) {
         val full = taglineLayout(measurer, tagline, h, density)
         val shown = tagline.take(taglineChars)
         val part = if (shown.length == tagline.length) full else taglineLayout(measurer, shown, h, density)
         val tx = x0 + tw / 2f - full.size.width / 2f
-        val tyTop = cy + h * 0.36f
+        val tyTop = cy + h * 0.20f
         drawText(part, HorizonColors.Violet, topLeft = Offset(tx + h * 0.012f, tyTop + h * 0.012f), alpha = wordAlpha * 0.9f)
         drawText(part, HorizonColors.Mint, topLeft = Offset(tx, tyTop), alpha = wordAlpha)
         if (taglineCursor) {
@@ -128,18 +134,18 @@ internal fun DrawScope.drawRetroWordmark(
     }
 
     if (badge != null && stickerAlpha > 0f && stickerScale > 0f) {
-        val c = Offset(x0 + tw + gap + sw / 2f, cy - h * 0.12f)
-        val sh = h * 0.5f
+        val c = Offset(x0 + tw + gap + sw / 2f, wcy - hw * 0.12f)
+        val sh = hw * 0.5f
         withTransform({
             rotate(-11f, c)
             scale(stickerScale, stickerScale, c)
         }) {
             val tl = Offset(c.x - sw / 2f, c.y - sh / 2f)
             val r = CornerRadius(sh * 0.22f)
-            drawRoundRect(Color.Black.copy(alpha = 0.35f * stickerAlpha), tl + Offset(h * 0.04f, h * 0.05f), Size(sw, sh), r)
+            drawRoundRect(Color.Black.copy(alpha = 0.35f * stickerAlpha), tl + Offset(hw * 0.04f, hw * 0.05f), Size(sw, sh), r)
             drawRoundRect(HorizonColors.Pop.copy(alpha = stickerAlpha), tl, Size(sw, sh), r)
-            drawRoundRect(HorizonColors.Accent.copy(alpha = stickerAlpha), tl, Size(sw, sh), r, style = Stroke(h * 0.035f))
-            val l = stickerLayout(measurer, badge, h, density)
+            drawRoundRect(HorizonColors.Accent.copy(alpha = stickerAlpha), tl, Size(sw, sh), r, style = Stroke(hw * 0.035f))
+            val l = stickerLayout(measurer, badge, hw, density)
             drawText(l, HorizonColors.OnAccent, topLeft = Offset(c.x - l.size.width / 2f, c.y - l.size.height / 2f), alpha = stickerAlpha)
         }
     }
