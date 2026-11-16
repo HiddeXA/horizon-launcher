@@ -48,6 +48,17 @@ class SeriesLogicTest {
         assertEquals("De terugkeer", Episode.titleOr("De terugkeer", 4))
     }
 
+    @Test fun afleveringstitelsOpgeschoond() {
+        assertEquals("De terugkeer", EpisodeTitles.clean("┃NL┃ Zoutwater - S02E04 - De terugkeer", "Zoutwater", 4))
+        assertEquals("De terugkeer", EpisodeTitles.clean("Zoutwater S02 E04: De terugkeer", "Zoutwater", 4))
+        assertEquals("Aflevering 4", EpisodeTitles.clean("Zoutwater - S02E04", "Zoutwater", 4))
+        assertEquals("Aflevering 4", EpisodeTitles.clean("Episode 4", "Zoutwater", 4))
+        assertEquals("Aflevering 7", EpisodeTitles.clean("", "Zoutwater", 7))
+        assertEquals("Laag water", EpisodeTitles.clean("Laag water", "Zoutwater", 3))
+        assertEquals("Laag water", EpisodeTitles.clean("Zoutwater - Laag water", "Zoutwater", 3))
+        assertEquals("Zoutwater", EpisodeTitles.clean("Zoutwater", "Zoutwater", 1))
+    }
+
     // --- Waar je was ---
 
     @Test fun nogNietGekekenBegintBijS1A1() {

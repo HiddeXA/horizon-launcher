@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,9 @@ import nl.thuis.launcher.data.Recommender
 class BiosActivity : ComponentActivity() {
 
     private var section by mutableStateOf(BiosSection.HOME)
+    /** De tab (Films of Series) die je het laatst gebruikte: daar opent Horizon, en daar gaat "terug" heen. */
+    private var mainTab by mutableStateOf(BiosSection.HOME)
+    private val uiPrefs by lazy { getSharedPreferences("bios-ui", MODE_PRIVATE) }
     private var searchQuery by mutableStateOf("")
     private var introVisible by mutableStateOf(false)
     private var introSkip by mutableStateOf(false)
@@ -47,15 +51,22 @@ class BiosActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         HorizonColors.palette = HorizonPalette.Twilight   // Roze Hoek kan het palet op roze hebben gezet
         // Startanimatie bij een koude start, behalve als we vanuit de launcher met een zoekopdracht komen.
-        if (intent?.getStringExtra(EXTRA_SEARCH) == null && intent?.getBooleanExtra("probe", false) != true && intent?.getBooleanExtra("probelive", false) != true) showIntro()
+        if (intent?.getStringExtra(EXTRA_SEARCH) == null && intent?.getBooleanExtra("probe", false) != true && intent?.getBooleanExtra("probelive", false) != true && intent?.getBooleanExtra("probeseries", false) != true) showIntro()
+        mainTab = if (uiPrefs.getString("tab", null) == BiosSection.SERIES.name) BiosSection.SERIES else BiosSection.HOME
+        section = mainTab
         handle(intent)
-        lifecycleScope.launch { Bios.load(this@BiosActivity) }
+        // Eerst de films, dan de series: de series houden het openen van Horizon niet op.
+        lifecycleScope.launch {
+            Bios.load(this@BiosActivity)
+            Series.load(this@BiosActivity)
+        }
 
         setContent {
             HorizonTheme {
-                BackHandler(enabled = section != BiosSection.HOME) { section = BiosSection.HOME }
+                // Terug op Zoeken, Filter of Mijn lijst: naar de tab waar je vandaan kwam. Op Films of Series sluit Horizon.
+                BackHandler(enabled = section != BiosSection.HOME && section != BiosSection.SERIES) { section = mainTab }
                 Box(Modifier.fillMaxSize()) {
-                    BiosApp(section = section, onSection = { section = it }, searchQuery = searchQuery, context = this@BiosActivity, introVisible = introVisible)
+                    BiosApp(section = section, onSection = { select(it) }, searchQuery = searchQuery, context = this@BiosActivity, introVisible = introVisible)
                     if (introVisible) HorizonIntro(skip = introSkip) { introVisible = false }
                 }
             }
@@ -63,6 +74,14 @@ class BiosActivity : ComponentActivity() {
     }
 
     private fun showIntro() { introSkip = false; introVisible = true }
+
+    private fun select(s: BiosSection) {
+        section = s
+        if (s == BiosSection.HOME || s == BiosSection.SERIES) {
+            mainTab = s
+            uiPrefs.edit().putString("tab", s.name).apply()
+        }
+    }
 
     override fun onStart() {
         super.onStart()
@@ -94,6 +113,7 @@ class BiosActivity : ComponentActivity() {
         // Alleen voor onderhoud via adb: welke velden stuurt de aanbieder mee?
         if (intent?.getBooleanExtra("probe", false) == true) lifecycleScope.launch { Bios.probeFields() }
         if (intent?.getBooleanExtra("probelive", false) == true) lifecycleScope.launch { Bios.probeLive() }
+        if (intent?.getBooleanExtra("probeseries", false) == true) lifecycleScope.launch { Series.probe() }
         intent?.getStringExtra(EXTRA_SEARCH)?.let {
             searchQuery = it
             section = BiosSection.SEARCH
@@ -118,6 +138,7 @@ private fun BiosApp(section: BiosSection, onSection: (BiosSection) -> Unit, sear
     val progress = remember { Bios.progress(context) }
     val myList = remember { Bios.myList(context) }
     var detail by remember { mutableStateOf<VodItem?>(null) }
+    var serie by remember { mutableStateOf<SeriesItem?>(null) }
     var settings by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(BiosFilter()) }
     val scope = rememberCoroutineScope()
@@ -148,6 +169,7 @@ private fun BiosApp(section: BiosSection, onSection: (BiosSection) -> Unit, sear
                         }
                         rows?.let { BiosHome(it, progress.entries, onOpen = { detail = it }, firstFocus = contentFocus) }
                     }
+                    BiosSection.SERIES -> SeriesTab(context, onOpen = { serie = it }, firstFocus = contentFocus)
                     BiosSection.SEARCH -> BiosSearch(idx, searchQuery, onOpen = { detail = it }, firstFocus = contentFocus)
                     BiosSection.FILTER -> BiosFilterScreen(idx, filter, onFilter = { filter = it }, onOpen = { detail = it }, firstFocus = contentFocus)
                     BiosSection.MYLIST -> BiosMyList(myList.ids.mapNotNull { idx.byId[it] }, onOpen = { detail = it }, firstFocus = contentFocus)
@@ -171,9 +193,26 @@ private fun BiosApp(section: BiosSection, onSection: (BiosSection) -> Unit, sear
                 onSaved = { changed ->
                     if (changed.any { it.name.startsWith("X") }) {
                         Bios.reset(context)
-                        scope.launch { Bios.load(context, force = true) }
+                        Series.reset(context)
+                        scope.launch {
+                            Bios.load(context, force = true)
+                            Series.load(context, force = true)
+                        }
                     }
                 },
+            )
+        }
+
+        serie?.let { item ->
+            SeriesDetailScreen(
+                item = item,
+                onPlay = { ep, fromStart -> context.startActivity(PlayerActivity.episodeIntent(context, item, ep, fromStart)) },
+                onTrailer = { d ->
+                    if (!openYouTube(context, d?.trailerKey, "${item.title} ${item.year.orEmpty()} trailer")) {
+                        Toast.makeText(context, "YouTube kon de trailer niet openen", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onDismiss = { serie = null },
             )
         }
 
@@ -195,6 +234,46 @@ private fun BiosApp(section: BiosSection, onSection: (BiosSection) -> Unit, sear
                 },
                 onDismiss = { detail = null },
             )
+        }
+    }
+}
+
+/**
+ * Tab Series: eigen laad-, lege en foutstaat, los van de films.
+ * In elke staat hangt [firstFocus] aan iets wat focus kan krijgen, zodat "omlaag" vanuit het menu altijd werkt.
+ */
+@Composable
+private fun SeriesTab(context: Context, onOpen: (SeriesItem) -> Unit, firstFocus: FocusRequester) {
+    val state by Series.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    when (val s = state) {
+        SeriesState.NotConfigured -> Box(Modifier.focusRequester(firstFocus).focusable())
+        is SeriesState.Loading -> Box(Modifier.fillMaxSize()) {
+            LoadingScreen(s.phase, s.progress, s.count, unit = "series")
+            Box(Modifier.focusRequester(firstFocus).focusable())
+        }
+        SeriesState.Empty -> Box(Modifier.fillMaxSize()) {
+            EmptyMessage("Je aanbieder heeft geen series", "Films kijken kan gewoon via de tab Films.", Modifier.align(Alignment.Center))
+            Box(Modifier.focusRequester(firstFocus).focusable())
+        }
+        is SeriesState.Error -> Column(Modifier.fillMaxSize(), verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            EmptyMessage("Series konden niet geladen worden", s.message)
+            BiosButton("Opnieuw proberen", primary = true, modifier = Modifier.focusRequester(firstFocus)) {
+                scope.launch { Series.load(context, force = true) }
+            }
+        }
+        is SeriesState.Ready -> {
+            val idx = s.index
+            val store = remember { Series.store(context) }
+            var genreRows by remember(idx) { mutableStateOf<Map<String, List<Int>>?>(null) }
+            LaunchedEffect(idx) { genreRows = runCatching { SeriesGenres.shelves(context, idx) }.getOrDefault(emptyMap()) }
+            var rows by remember { mutableStateOf<List<SeriesRow>?>(null) }
+            // Verandert er iets aan waar je was of aan Mijn lijst, dan de rijen opnieuw opbouwen.
+            val changes = store.summaries.values.fold(store.myList.size.toLong()) { a, v -> a * 31 + v.updated + (if (v.finished) 1L else 0L) }
+            LaunchedEffect(idx, genreRows, changes) {
+                rows = withContext(Dispatchers.Default) { buildSeriesRows(idx, genreRows, store) }
+            }
+            rows?.let { SeriesHome(it, store.summaries, onOpen = onOpen, firstFocus = firstFocus) }
         }
     }
 }

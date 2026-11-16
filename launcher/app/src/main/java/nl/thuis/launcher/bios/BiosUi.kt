@@ -193,7 +193,8 @@ fun HorizonTheme(content: @Composable () -> Unit) {
 
 enum class BiosSection(val label: String, val icon: ImageVector?) {
     SEARCH("Zoeken", Icons.Filled.Search),
-    HOME("Home", null),
+    HOME("Films", null),
+    SERIES("Series", null),
     FILTER("Filter", null),
     MYLIST("Mijn lijst", null),
 }

@@ -103,3 +103,24 @@ data class NextUp(val episode: Episode, val kind: Kind, val resumeMs: Long, val 
         }
     }
 }
+
+/** Titels van afleveringen zijn vaak "Serienaam - S02E04 - Titel": alleen de titel blijft over. */
+object EpisodeTitles {
+    private val code = Regex("""[Ss]\d{1,2}\s*[EeXx]\s*\d{1,3}""")
+    private val generic = Regex("""^(episode|aflevering|afl|ep)\.?\s*\d+$""", RegexOption.IGNORE_CASE)
+    private const val SEPARATORS = " -:|.–—"
+
+    fun clean(raw: String?, seriesTitle: String, number: Int): String {
+        var s = TitleMatch.cleanName(raw.orEmpty()).trim()
+        if (s.isEmpty()) return Episode.titleOr(null, number)
+        val m = code.find(s)
+        if (m != null) {
+            s = s.substring(m.range.last + 1)
+        } else if (s.length > seriesTitle.length && s.startsWith(seriesTitle, ignoreCase = true) && s[seriesTitle.length] in SEPARATORS) {
+            s = s.substring(seriesTitle.length)
+        }
+        s = s.trim { it in SEPARATORS }
+        if (s.isEmpty() || generic.matches(s)) return Episode.titleOr(null, number)
+        return s
+    }
+}

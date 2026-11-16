@@ -46,6 +46,11 @@ class PlayerActivity : ComponentActivity() {
     private lateinit var view: PlayerView
     private lateinit var seekLabel: TextView
     private var itemId = 0
+    // Bij een aflevering van een serie (anders null: dan is het een film).
+    private var episode: Episode? = null
+    private var seriesItem: SeriesItem? = null
+    private var seriesDetail: SeriesDetail? = null
+    private var ended = false
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("bios-player", MODE_PRIVATE) }
 
@@ -68,11 +73,22 @@ class PlayerActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         itemId = intent.getIntExtra(EXTRA_ID, 0)
-        val item = Bios.index?.byId?.get(itemId)
-        if (item == null || Bios.config == null) {
+        val seriesId = intent.getIntExtra(EXTRA_SERIES, 0)
+        val item = if (seriesId == 0) Bios.index?.byId?.get(itemId) else null
+        if (seriesId != 0) {
+            seriesItem = Series.index?.byId?.get(seriesId)
+            seriesDetail = Series.cachedDetail(seriesId)
+            episode = seriesDetail?.let { EpisodeOrder.find(it.seasons, intent.getIntExtra(EXTRA_EPISODE, 0)) }
+        }
+        val ep = episode
+        val serie = seriesItem
+        if (Bios.config == null || (item == null && (ep == null || serie == null))) {
             finish()
             return
         }
+        // Naam voor meldingen en het adres van de stream (wordt nooit gelogd).
+        val name = if (ep != null) "${serie!!.title} · ${ep.label}" else item!!.title
+        val url = if (ep != null) Series.episodeUrl(ep) else Bios.streamUrl(item!!)
 
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         view = PlayerView(this).apply {
@@ -95,7 +111,7 @@ class PlayerActivity : ComponentActivity() {
 
         // Titelbalk bovenin, alleen zichtbaar samen met de bediening.
         val title = TextView(this).apply {
-            text = item.title + (item.year?.let { "  ($it)" } ?: "")
+            text = if (ep != null) episodeHeading(serie!!.title, ep) else item!!.title + (item.year?.let { "  ($it)" } ?: "")
             setTextColor(TEXT)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
             typeface = poppins
@@ -124,7 +140,11 @@ class PlayerActivity : ComponentActivity() {
         })
 
         val fromStart = intent.getBooleanExtra(EXTRA_FROM_START, false)
-        val start = if (fromStart) 0L else Bios.progress(this).resumeAt(itemId)
+        val start = when {
+            fromStart -> 0L
+            ep != null -> Series.store(this).resumeAt(ep.id)
+            else -> Bios.progress(this).resumeAt(itemId)
+        }
 
         val selector = DefaultTrackSelector(this).apply { setParameters(savedSubtitleChoice(buildUponParameters())) }
         val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
@@ -136,16 +156,16 @@ class PlayerActivity : ComponentActivity() {
                 view.player = p
                 p.setMediaItem(
                     MediaItem.Builder()
-                        .setUri(Uri.parse(Bios.streamUrl(item)))
-                        .setMediaMetadata(MediaMetadata.Builder().setTitle(item.title).build())
+                        .setUri(Uri.parse(url))
+                        .setMediaMetadata(MediaMetadata.Builder().setTitle(name).build())
                         .build(),
                     start,
                 )
                 p.addListener(object : Player.Listener {
-                    override fun onPlayerError(error: PlaybackException) = showError(error, item)
+                    override fun onPlayerError(error: PlaybackException) = showError(error, name, url, ep != null)
                     override fun onPlaybackStateChanged(state: Int) {
                         if (state == Player.STATE_ENDED) {
-                            Bios.progress(this@PlayerActivity).remove(itemId)
+                            if (ep != null) markEpisodeWatched() else Bios.progress(this@PlayerActivity).remove(itemId)
                             finish()
                         }
                     }
@@ -289,36 +309,53 @@ class PlayerActivity : ComponentActivity() {
         handler.removeCallbacks(hideLabel)
     }
 
-    private fun showError(error: PlaybackException, item: VodItem) {
+    /** Titel bovenin bij een aflevering: de serie groot, daaronder "S2 · A4 · titel". */
+    private fun episodeHeading(series: String, ep: Episode): CharSequence {
+        val text = android.text.SpannableString("$series\n${ep.label}  ·  ${ep.title}")
+        text.setSpan(android.text.style.RelativeSizeSpan(0.62f), series.length + 1, text.length, 0)
+        return text
+    }
+
+    /** De aflevering is afgelopen: gezien, en de serie wijst naar de volgende. */
+    private fun markEpisodeWatched() {
+        val ep = episode ?: return
+        val s = seriesItem ?: return
+        val d = seriesDetail ?: return
+        ended = true
+        Series.store(this).savePosition(s, d, ep, 1, 1)
+    }
+
+    private fun showError(error: PlaybackException, name: String, url: String, isEpisode: Boolean) {
+        val what = if (isEpisode) "aflevering" else "film"
         saveProgress()
         val kodi = packageManager.getLaunchIntentForPackage(KODI) != null
         val msg = when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-                "Je aanbieder geeft deze film nu niet door. Probeer het later opnieuw."
+                "Je aanbieder geeft deze $what nu niet door. Probeer het later opnieuw."
             PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
             PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ->
-                "Dit kastje kan het beeld- of geluidsformaat van deze film niet afspelen."
+                "Dit kastje kan het beeld- of geluidsformaat van deze $what niet afspelen."
             else -> "Afspelen lukt niet (${error.errorCodeName})."
         }
         AlertDialog.Builder(this)
-            .setTitle(item.title)
+            .setTitle(name)
             .setMessage(if (kodi) "$msg\n\nKodi kan meer formaten aan." else msg)
             .apply {
-                if (kodi) setPositiveButton("Open in Kodi") { _, _ -> openInKodi(item) }
+                if (kodi) setPositiveButton("Open in Kodi") { _, _ -> openInKodi(url) }
                 setNegativeButton("Terug") { _, _ -> finish() }
             }
             .setOnCancelListener { finish() }
             .show()
     }
 
-    private fun openInKodi(item: VodItem) {
+    private fun openInKodi(url: String) {
         runCatching {
             startActivity(
                 Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(Uri.parse(Bios.streamUrl(item)), "video/*")
+                    .setDataAndType(Uri.parse(url), "video/*")
                     .setPackage(KODI)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
@@ -339,6 +376,7 @@ class PlayerActivity : ComponentActivity() {
 
     private fun flushTaste() {
         countWatched()
+        if (episode != null) { watchedMs = 0; return }
         val item = Bios.index?.byId?.get(itemId) ?: return
         if (watchedMs >= 3 * 60_000) Bios.recordTaste(this, item, Taste.watchWeight(watchedMs / 60_000.0))
         watchedMs = 0
@@ -348,6 +386,13 @@ class PlayerActivity : ComponentActivity() {
         countWatched()
         val p = player ?: return
         val dur = p.duration.takeIf { it != C.TIME_UNSET } ?: 0L
+        val ep = episode
+        if (ep != null) {
+            val s = seriesItem
+            val d = seriesDetail
+            if (!ended && s != null && d != null) Series.store(this).savePosition(s, d, ep, p.currentPosition, dur)
+            return
+        }
         Bios.progress(this).save(itemId, p.currentPosition, dur)
     }
 
@@ -375,12 +420,21 @@ class PlayerActivity : ComponentActivity() {
         private const val ACCENT = 0xFF48CAE4.toInt()
         private const val EXTRA_ID = "id"
         private const val EXTRA_FROM_START = "fromStart"
+        private const val EXTRA_SERIES = "series"
+        private const val EXTRA_EPISODE = "episode"
         private const val KODI = "org.xbmc.kodi"
         private const val SEEK_MS = 30_000L
 
         fun intent(context: Context, item: VodItem, fromStart: Boolean = false) =
             Intent(context, PlayerActivity::class.java)
                 .putExtra(EXTRA_ID, item.id)
+                .putExtra(EXTRA_FROM_START, fromStart)
+
+        /** Een aflevering afspelen. De afleveringen van de serie moeten al zijn opgehaald ([Series.detail]). */
+        fun episodeIntent(context: Context, series: SeriesItem, episode: Episode, fromStart: Boolean = false) =
+            Intent(context, PlayerActivity::class.java)
+                .putExtra(EXTRA_SERIES, series.id)
+                .putExtra(EXTRA_EPISODE, episode.id)
                 .putExtra(EXTRA_FROM_START, fromStart)
     }
 }
