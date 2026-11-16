@@ -1,4 +1,4 @@
-Status: goedgekeurd 2026-11-16
+Status: goedgekeurd 2026-11-16 (aangepast in de designronde: geen label Serie; launcher-rij gemengd)
 
 # Series in Horizon — Spec
 
@@ -93,14 +93,14 @@ Series uit je eigen aanbod kijken in Horizon, net zo makkelijk als films: een se
 - [ ] 5.7 Gegeven ik laat OK los na lang indrukken, dan start er geen aflevering.
 
 ### 6. Zoeken, Filter en Mijn lijst
-- [ ] 6.1 Gegeven ik zoek op een titel, dan staan films en series samen in de resultaten, beste overeenkomst eerst, en is aan elke tegel te zien of het een serie is.
+- [ ] 6.1 Gegeven ik zoek op een titel, dan staan films en series samen in de resultaten, beste overeenkomst eerst, zonder apart label voor series.
 - [ ] 6.2 Gegeven het lege zoekscherm, dan staat er "Zoek een film of serie…" en hoeveel films en series doorzocht worden.
 - [ ] 6.3 Gegeven Horizon wordt vanuit de launcher geopend met een zoekopdracht, dan staan ook series in de resultaten.
 - [ ] 6.4 Gegeven het filterscherm, dan kan ik bovenaan kiezen tussen Films en Series; vooraf gekozen is de tab waar ik vandaan kwam.
 - [ ] 6.5 Gegeven Series is gekozen in het filter, dan werken genres (meerdere tegelijk), periode, minimale score en sortering op series, en toont de genrelijst de genres van series.
 - [ ] 6.6 Gegeven ik wissel in het filter tussen Films en Series, dan blijven periode, score en sortering staan; gekozen genres die het andere type niet kent vervallen.
 - [ ] 6.7 Gegeven het seriescherm en ik kies + Mijn lijst, dan staat de serie in Mijn lijst en heet de knop ✓ Mijn lijst; nogmaals kiezen haalt hem eruit.
-- [ ] 6.8 Gegeven de tab Mijn lijst, dan staan films en series samen, laatst toegevoegd eerst, en is aan elke tegel te zien of het een serie is.
+- [ ] 6.8 Gegeven de tab Mijn lijst, dan staan films en series samen, laatst toegevoegd eerst, zonder apart label voor series.
 - [ ] 6.9 Gegeven de rij Mijn lijst op de tab Series, dan staan daar alleen series; op de tab Films alleen films.
 
 ### 7. Kijkprofiel voor series
@@ -118,13 +118,13 @@ Series uit je eigen aanbod kijken in Horizon, net zo makkelijk als films: een se
 - [ ] 8.5 Gegeven een serie die ik niet volg, dan krijgt die nooit het label.
 
 ### 9. Launcher
-- [ ] 9.1 Gegeven de launcher met een TMDB-sleutel, dan staat onder "Aanbevolen voor jou" een rij "Aanbevolen series"; de filmrij blijft zoals hij is.
-- [ ] 9.2 Gegeven de rij Aanbevolen series, dan komen de series uit: populair deze week, klassiekers en series die lijken op series die ik leuk vond, met scores van IMDb en Rotten Tomatoes waar bekend.
+- [ ] 9.1 Gegeven de launcher met een TMDB-sleutel, dan toont de rij "Aanbevolen voor jou" films en series door elkaar, op volgorde van score; er is geen aparte rij voor series en geen label op de tegels.
+- [ ] 9.2 Gegeven de rij Aanbevolen voor jou, dan komen de series uit: populair deze week, klassiekers en series die lijken op series die ik leuk vond, met scores van IMDb en Rotten Tomatoes waar bekend.
 - [ ] 9.3 Gegeven een serie in de rij heeft focus, dan toont de top shelf het beeld, de titel en waarom hij is aanbevolen, net als bij een film.
 - [ ] 9.4 Gegeven ik druk op OK op een serie, dan opent een seriescherm met beeld, titel, jaar, aantal seizoenen, scores, omschrijving en de knoppen Trailer en Vind ik leuk.
 - [ ] 9.5 Gegeven de serie zit in mijn aanbod, dan heeft dat scherm ook: een afspeelknop met dezelfde tekst als 3.1, die de genoemde aflevering direct afspeelt, en een knop Afleveringen, die het seriescherm in Horizon opent.
 - [ ] 9.6 Gegeven de serie zit niet in mijn aanbod, dan staat er "Zoek in Horizon", die Horizon opent met de titel als zoekopdracht.
-- [ ] 9.7 Gegeven ik kies Vind ik leuk bij een serie, dan staat die in de lijst met wat ik leuk vond (lang OK op de klok), herkenbaar als serie, en telt hij mee voor Aanbevolen series.
+- [ ] 9.7 Gegeven ik kies Vind ik leuk bij een serie, dan staat die tussen de films in de lijst met wat ik leuk vond (lang OK op de klok) en telt hij mee voor de aanbevolen series.
 - [ ] 9.8 Gegeven likes van series, dan veranderen die de aanbevolen films niet, en andersom.
 
 ### 10. Laden en snelheid
@@ -146,7 +146,7 @@ Series uit je eigen aanbod kijken in Horizon, net zo makkelijk als films: een se
 | H | Filter: keuze Films / Series | aangepast | 6 |
 | I | Mijn lijst: films en series samen | aangepast | 6 |
 | J | Laadscherm: ook series | aangepast | 1 |
-| K | Launcher: rij Aanbevolen series | nieuw | 9 |
+| K | Launcher: rij Aanbevolen voor jou met films en series | aangepast | 9 |
 | L | Launcher: seriescherm | nieuw | 9 |
 | M | Launcher: lijst Vind ik leuk met series | aangepast | 9 |
 
@@ -162,7 +162,7 @@ Series uit je eigen aanbod kijken in Horizon, net zo makkelijk als films: een se
 - **Aflevering verdwenen bij de aanbieder:** Verder kijken wijst naar de eerstvolgende die er wel is. Is de hele serie weg, dan verdwijnt hij uit Verder kijken en Mijn lijst-rijen; hij komt terug als de aanbieder hem terugzet.
 - **Volgende aflevering start niet:** er komt een foutmelding met het aanbod van Kodi; de speler probeert niet vanzelf nog een aflevering.
 - **Duur van de aflevering onbekend:** de kaart verschijnt als de aflevering is afgelopen en telt dan 10 s af.
-- **Geen TMDB-sleutel:** de tab Series toont de categorieën van de aanbieder als rijen (zoals films nu); Top series en Aanbevolen series ontbreken; in het filter ontbreken de genres; de launcher toont de rij Aanbevolen series niet.
+- **Geen TMDB-sleutel:** de tab Series toont de categorieën van de aanbieder als rijen (zoals films nu); Top series en Aanbevolen series ontbreken; in het filter ontbreken de genres; de launcher toont geen aanbevelingen (zoals nu).
 - **Serie zonder TMDB-nummer:** hij is te vinden via Zoeken, Nieuwe series, categorieën en Mijn lijst, maar staat niet in Top series of genrerijen.
 - **Andere aanbieder of inlog ingesteld:** de serielijst wordt opnieuw opgehaald; posities, vinkjes en Mijn lijst van series die niet meer bestaan worden niet getoond.
 

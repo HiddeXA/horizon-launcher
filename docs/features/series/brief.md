@@ -14,7 +14,7 @@
 5. Series in **Zoeken**, **Filter** en **Mijn lijst**.
 6. **Kijkprofiel voor series:** genrerijen gesorteerd op kijkgedrag en een rij Aanbevolen series.
 7. Label **Nieuwe aflevering** bij series die je volgt.
-8. **Launcher:** een eigen rij Aanbevolen series, met een seriescherm dat doorverwijst naar Horizon.
+8. **Launcher:** series tussen de films in Aanbevolen voor jou, met een seriescherm dat doorverwijst naar Horizon.
 
 ## Non-goals
 - Wijzigingen aan hoe films werken (de Films-tab blijft wat Home nu is).
@@ -33,7 +33,7 @@
 | Waar staan de series? | Eigen tab Series; Home heet voortaan Films. Zoeken en Mijn lijst tonen beide. |
 | Na een aflevering? | Volgende aflevering met aftelling van 10 s (Nu afspelen / Annuleren); loopt door naar het volgende seizoen. |
 | Extra's in versie 1 | Gezien-vinkjes, kijkprofiel voor series, label Nieuwe aflevering, series in de launcher. |
-| Launcher | Eigen rij Aanbevolen series onder Aanbevolen voor jou. |
+| Launcher | Films en series door elkaar in Aanbevolen voor jou (gewijzigd in de designronde). |
 
 ## Open vragen
 1. **Hoe ziet het serie-aanbod van de aanbieder eruit?** Nog niet gemeten: aantal series, of er TMDB-nummers en genres bij zitten, en wat er per aflevering bekend is (titel, duur, plaatje). Meten op de tv vóór het ontwerp.
