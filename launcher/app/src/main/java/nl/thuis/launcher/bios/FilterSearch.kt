@@ -61,8 +61,6 @@ object FilterSearch {
         val filmList = f?.getOrNull().orEmpty()
         val showList = s?.getOrNull().orEmpty()
         val scores = FilterMerge.Scores(
-            filmPop = { BiosGenres.meta[it.id]?.popularity },
-            showPop = { SeriesGenres.meta[it.id]?.popularity },
             filmVote = { it.rating ?: BiosGenres.meta[it.id]?.vote },
             showVote = { it.rating ?: SeriesGenres.meta[it.id]?.vote },
         )

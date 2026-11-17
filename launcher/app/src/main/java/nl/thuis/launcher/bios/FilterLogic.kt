@@ -54,10 +54,8 @@ object FilterQuery {
 
 /** Films en series samen in één lijst, op de gekozen sortering. */
 object FilterMerge {
-    /** Hoe populair en hoe goed een titel is; null als we het niet weten. */
+    /** Hoe goed een titel is (voor Beste score); null als we het niet weten. */
     class Scores(
-        val filmPop: (VodItem) -> Double?,
-        val showPop: (SeriesItem) -> Double?,
         val filmVote: (VodItem) -> Double?,
         val showVote: (SeriesItem) -> Double?,
     )
@@ -69,11 +67,9 @@ object FilterMerge {
             FilterSort.AZ -> (f + t).sortedBy { it.title.lowercase() }
             FilterSort.NEWEST -> (f + t).sortedByDescending { time(it) }
             FilterSort.RATING -> (f + t).sortedByDescending { vote(it, s) ?: 0.0 }
-            FilterSort.POPULAR -> {
-                val pops = (f + t).map { pop(it, s) }
-                if (pops.all { it != null }) (f + t).sortedByDescending { pop(it, s) }
-                else interleave(f, t)   // elke lijst is al op populariteit gesorteerd
-            }
+            // Elke lijst is al op populariteit gesorteerd. De cijfers van films en series zijn niet
+            // vergelijkbaar (series scoren bij TMDB veel hoger), dus om en om.
+            FilterSort.POPULAR -> interleave(f, t)
         }
     }
 
@@ -85,11 +81,6 @@ object FilterMerge {
     private fun vote(l: Listing, s: Scores): Double? = when (l) {
         is Listing.Film -> s.filmVote(l.item)
         is Listing.Show -> s.showVote(l.item)
-    }
-
-    private fun pop(l: Listing, s: Scores): Double? = when (l) {
-        is Listing.Film -> s.filmPop(l.item)
-        is Listing.Show -> s.showPop(l.item)
     }
 
     private fun interleave(a: List<Listing>, b: List<Listing>): List<Listing> {

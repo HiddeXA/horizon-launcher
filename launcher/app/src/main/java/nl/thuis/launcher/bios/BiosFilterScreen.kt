@@ -138,10 +138,20 @@ fun BiosFilterScreen(
     var chipX by remember { mutableStateOf(List(4) { 0f }) }
 
     fun focusSoort() = runCatching { segReq[filter.kind.ordinal].requestFocus() }
+    // Na het sluiten van een paneel: focus terug op de eigen keuzeknop. Pas als het paneel weg is,
+    // want zolang het er staat laat het de focus niet naar buiten.
+    var refocus by remember { mutableStateOf<Int?>(null) }
     fun close() {
         val p = open ?: return
+        refocus = p.ordinal
         open = null
-        runCatching { chipReq[p.ordinal].requestFocus() }
+    }
+    LaunchedEffect(open, refocus) {
+        val i = refocus ?: return@LaunchedEffect
+        if (open != null) return@LaunchedEffect
+        delay(60)
+        runCatching { chipReq[i].requestFocus() }
+        refocus = null
     }
     fun clearAll() {
         onFilter(BiosFilter())
@@ -243,15 +253,19 @@ fun BiosFilterScreen(
                             if (filter.options.isNotEmpty()) add("Zonder genre tonen" to { onFilter(filter.copy(genres = emptySet())) })
                         },
                         firstFocus = contentDown,
+                        afterAction = { focusSoort() },
                     )
                     o.items.isEmpty() -> StateMessage(
                         icon = { EmptyPlanet() },
                         title = "Geen ${noun(filter.kind)} gevonden",
                         body = FilterTexts.emptyExplanation(filter),
                         buttons = FilterTexts.suggestions(filter).map { fix ->
-                            fix.label to { if (fix == FilterTexts.Fix.CLEAR) clearAll() else onFilter(fix.apply(filter)) }
+                            fix.label to {
+                                if (fix == FilterTexts.Fix.CLEAR) clearAll() else { onFilter(fix.apply(filter)); focusSoort() }
+                            }
                         },
                         firstFocus = contentDown,
+                        afterAction = {},
                     )
                     else -> {
                         val firstKey = o.items.first().listKey
@@ -496,6 +510,8 @@ private fun StateMessage(
     body: String,
     buttons: List<Pair<String, () -> Unit>>,
     firstFocus: FocusRequester,
+    /** Na een knop verdwijnt deze staat: de focus gaat dan naar de filterbalk. */
+    afterAction: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().padding(bottom = 40.dp),
@@ -510,7 +526,7 @@ private fun StateMessage(
         Spacer(Modifier.height(22.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             buttons.forEachIndexed { i, (label, action) ->
-                BiosButton(label, modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier, onClick = action)
+                BiosButton(label, modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier) { action(); afterAction() }
             }
         }
     }
