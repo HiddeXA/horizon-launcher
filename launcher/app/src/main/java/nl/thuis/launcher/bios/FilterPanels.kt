@@ -105,7 +105,7 @@ fun GenrePanel(filter: BiosFilter, onToggle: (GenreOption) -> Unit, modifier: Mo
                         row.forEachIndexed { c, o ->
                             val i = r * columns + c
                             GenreOptionButton(
-                                o, on = o.key in filter.genres, showTag = filter.kind == FilterKind.ALL,
+                                o, on = o.key in filter.genres, showTag = filter.kind == FilterKind.ALL, narrow = columns == 5,
                                 modifier = Modifier.weight(1f).let { if (i == focusIndex) it.focusRequester(first) else it },
                             ) { onToggle(o) }
                         }
@@ -122,7 +122,7 @@ fun GenrePanel(filter: BiosFilter, onToggle: (GenreOption) -> Unit, modifier: Mo
 }
 
 @Composable
-private fun GenreOptionButton(o: GenreOption, on: Boolean, showTag: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun GenreOptionButton(o: GenreOption, on: Boolean, showTag: Boolean, narrow: Boolean, modifier: Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
@@ -134,7 +134,8 @@ private fun GenreOptionButton(o: GenreOption, on: Boolean, showTag: Boolean, mod
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.03f),
         modifier = modifier.height(48.dp).onFocusChanged { focused = it.isFocused },
     ) {
-        Row(Modifier.padding(horizontal = 12.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Bij 5 kolommen (series) iets krapper, zodat lange namen als "Documentaire" heel blijven.
+        Row(Modifier.padding(horizontal = if (narrow) 10.dp else 12.dp).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(18.dp)
                     .background(if (on) HorizonColors.Accent else Color.Transparent, RoundedCornerShape(5.dp))
@@ -143,10 +144,10 @@ private fun GenreOptionButton(o: GenreOption, on: Boolean, showTag: Boolean, mod
             ) {
                 if (on) Icon(Icons.Filled.Check, contentDescription = null, tint = HorizonColors.OnAccent, modifier = Modifier.size(14.dp))
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(if (narrow) 8.dp else 10.dp))
             Column {
                 Text(
-                    o.label, fontSize = 14.sp, lineHeight = 17.sp,
+                    o.label, fontSize = if (narrow) 13.sp else 14.sp, lineHeight = 17.sp,
                     fontWeight = if (on || focused) FontWeight.Bold else FontWeight.Medium,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )

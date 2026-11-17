@@ -198,7 +198,7 @@ fun BiosFilterScreen(
                         ) { onFilter(filter.switchTo(k)) }
                     }
                 }
-                Box(Modifier.padding(horizontal = 12.dp).width(1.dp).height(24.dp).background(HorizonColors.SurfaceHigh))
+                Box(Modifier.padding(horizontal = 8.dp).width(1.dp).height(24.dp).background(HorizonColors.SurfaceHigh))
                 val chips = listOf(
                     Triple(Panel.GENRES, "Genres", FilterTexts.chipValue(filter.options.map { it.label })),
                     Triple(Panel.PERIOD, "Periode", filter.period.takeIf { it != FilterPeriod.ALL }?.label),
@@ -206,7 +206,7 @@ fun BiosFilterScreen(
                     Triple(Panel.SORT, "Sorteren", filter.sort.label),
                 )
                 chips.forEachIndexed { i, (panel, label, value) ->
-                    if (i > 0) Spacer(Modifier.width(8.dp))
+                    if (i > 0) Spacer(Modifier.width(6.dp))
                     Chip(
                         label = label,
                         value = value,
@@ -400,7 +400,7 @@ private fun Segment(label: String, selected: Boolean, modifier: Modifier, onClic
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.04f),
         modifier = modifier.height(32.dp),
     ) {
-        Box(Modifier.height(32.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.height(32.dp).padding(horizontal = 11.dp), contentAlignment = Alignment.Center) {
             Text(label, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
         }
     }
@@ -422,15 +422,15 @@ private fun Chip(label: String, value: String?, valueSet: Boolean, isOpen: Boole
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
         modifier = modifier.height(40.dp).alpha(if (dim) 0.45f else 1f).onFocusChanged { focused = it.isFocused },
     ) {
-        Row(Modifier.height(40.dp).padding(start = 14.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.height(40.dp).padding(start = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                label, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1,
+                label, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
                 color = if (focused) Color.Unspecified else if (isOpen) HorizonColors.Text else HorizonColors.Dim,
             )
             if (value != null) {
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = if (focused) Color.Unspecified else if (valueSet) HorizonColors.Accent else HorizonColors.Text,
                     modifier = Modifier.weight(1f, fill = false),
                 )
@@ -439,7 +439,7 @@ private fun Chip(label: String, value: String?, valueSet: Boolean, isOpen: Boole
             Icon(
                 if (isOpen) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null,
                 tint = if (focused) HorizonColors.Background else if (isOpen) HorizonColors.Text else HorizonColors.Dim,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
     }

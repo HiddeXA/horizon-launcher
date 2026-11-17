@@ -65,3 +65,38 @@ Zelfde stack als de rest van Horizon: Kotlin 2.1, Compose for TV (tv-material 1.
 ## Dekking
 - **User stories:** 1 → 3.1–3.5; 2 → 1.1–1.4, 3.1, 3.7; 3 → 1.1, 3.3; 4 → 3.1, 3.4; 5 → 1.5, 3.1; 6 → 3.6; 7 → 1.5, 3.1, 3.5; 8 → 2.2, 3.5; 9 → 3.6.
 - **Schermen uit de spec:** 1 Beginstand → 3.1/3.7; 2 Films of Series → 3.3; 3 Actieve filters → 3.1; 4 Keuzes → 3.3/3.4; 5 Focus → 3.2; 6 Laden → 3.5; 7 Leeg → 3.5; 8 Token → 3.5; 9 TMDB-fout → 2.1/3.5.
+
+## Verificatie (17 nov 2026)
+- **Unit tests:** 54 geslaagd in de cloud (kotlinc 2.1.0); op de pc slaagt `testReleaseUnitTest` (via `9-test-bouw-installeer.cmd`).
+- **Op de tv** (Chromecast, 192.168.50.104): gebouwd, geïnstalleerd en met `logs\commands-filter-test.txt` doorlopen, met screenshots `logs\f0`–`f13`. Geen crashes (`AndroidRuntime:E` leeg).
+
+| Spec | Bewijs |
+|---|---|
+| Uitstraling 1–2 | f1, f4: huisstijlkleuren, Poppins, bovenmenu ongewijzigd; raster over de volle breedte (7 per rij) |
+| Soort 1–2 | f1: Alles gekozen en met focus na openen; f13: Terug brengt je naar de tab (Series) |
+| Soort 3–4 | f1/f4: films en series door elkaar, "75 titels · 66 films, 9 series"; `FilterMergeTest` |
+| Soort 5–7 | f2: gezamenlijke lijst van 20 met "alleen films/series"; f10: 15 seriegenres in 5 kolommen; `FilterGenresTest`, `FilterQueryTest` |
+| Soort 8 | f9/f10: Misdaad gaat mee van Alles naar Series; `FilterSwitchTest` |
+| Soort 9 | f6: "Film · 1995" in mint onder de titel met focus (de aanbieder geeft voor deze film geen speelduur; daarom het jaartal) |
+| Soort 10 | f1 "titels", f9 "9 series"; `FilterTextsTest` |
+| Keuzes 1–4 | f2 (Genres, meerdere), f3 (Periode, één keuze, sluit na OK) |
+| Keuzes 5–6 | f2/f3: gekozen = vinkje/checkbox + blauw; focus = lichte vulling |
+| Overzicht 1–3 | f4: waardes in de balk, aantal met "de bekendste", Alles wissen rechts; f1 zonder Wissen |
+| Bediening 1 | f1: focus op Alles na ▼ uit het bovenmenu |
+| Bediening 2 | f5: 1× ▼ vanuit de balk = eerste titel |
+| Bediening 3 | f8: Terug in het raster → Alles; f13: nog eens Terug → tab |
+| Bediening 4 | f2→f3: Terug sluit het paneel, focus terug op de keuzeknop |
+| Bediening 5 | f0: 0,25 s na de keuze "Titels zoeken…"; zoeken start na 350 ms |
+| Bediening 6 | f7: na het filmscherm weer focus op dezelfde titel (Se7en) |
+| Staten 1 | f0: skeletten + "Titels zoeken…", balk blijft staan |
+| Staten 3 | f11: uitleg in gewone taal + knoppen; f12: "Genres wissen" werkt, focus op de balk |
+| Staten 2, 4, 5, 6 | Niet op te wekken in deze test (series al geladen, token aanwezig, TMDB bereikbaar). Gedrag in code (`FilterSearch`, `FilterOutcome.allFailed/partlyFailed`) en teksten in `FilterTextsTest` |
+
+### Afwijkingen van het ontwerp (gemeld)
+1. **Alles wissen staat rechts op de regel met het aantal, niet in de filterbalk.** Op ware grootte (864 dp) passen segment, vier keuzeknoppen met waarde én Wissen niet op één regel (~1.000 dp nodig).
+2. **Keuzeknoppen iets compacter:** labels en waardes 13 in plaats van 14, kleinere binnenruimte. De waarde van Genres wordt afgekort ("Actie, Komedie +5", of met "…") als het krap wordt.
+3. **Genrepaneel bij Series (5 kolommen):** tekst 13 en iets minder binnenruimte, zodat "Documentaire" heel blijft.
+4. **Populair bij Alles:** films en series om en om. De populariteitscijfers van TMDB zijn tussen films en series niet vergelijkbaar: de eerste rij bestond anders alleen uit series.
+
+### Bekend, buiten deze ronde
+- Zonder genres filtert Horizon op het aanbod zelf (zoals vóór deze ronde). Bij Jaren 90 + 7+ geeft dat ook concertregistraties en dubbele titels van de aanbieder (f12).
