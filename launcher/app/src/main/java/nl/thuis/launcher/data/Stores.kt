@@ -49,13 +49,14 @@ class LikeStore(context: Context) {
         runCatching { addAll(JSONArray(prefs.getString("movies", "[]")).toMovies()) }
     }
 
-    fun isLiked(id: Int) = liked.any { it.id == id }
+    /** Films en series apart: een film en een serie kunnen bij TMDB hetzelfde nummer hebben. */
+    fun isLiked(movie: Movie) = liked.any { it.key == movie.key }
 
     fun toggle(movie: Movie) {
-        if (!liked.removeAll { it.id == movie.id }) liked.add(0, movie.copy(reason = ""))
+        if (!liked.removeAll { it.key == movie.key }) liked.add(0, movie.copy(reason = ""))
         prefs.edit().putString("movies", liked.toList().toJsonArray().toString()).apply()
     }
 
     /** Verandert zodra je iets (niet meer) leuk vindt; gebruikt om de cache te verversen. */
-    fun signature(): String = liked.map { it.id }.sorted().joinToString(",")
+    fun signature(): String = liked.map { it.key }.sorted().joinToString(",")
 }

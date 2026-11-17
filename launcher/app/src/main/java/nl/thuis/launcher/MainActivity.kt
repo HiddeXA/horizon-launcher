@@ -40,6 +40,14 @@ import nl.thuis.launcher.bios.BiosActivity
 import nl.thuis.launcher.bios.PlayerActivity
 import nl.thuis.launcher.bios.VodItem
 import nl.thuis.launcher.bios.openYouTube
+import nl.thuis.launcher.bios.NextUp
+import nl.thuis.launcher.bios.Series
+import nl.thuis.launcher.bios.SeriesDetail
+import nl.thuis.launcher.bios.SeriesItem
+import nl.thuis.launcher.bios.SeriesState
+import nl.thuis.launcher.bios.timecode
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import nl.thuis.launcher.ui.ThuisTheme
 
@@ -106,7 +114,12 @@ class MainActivity : ComponentActivity() {
             // Je filmaanbod (Bios): welke aanbevelingen kun je direct kijken?
             val biosState by Bios.state.collectAsState()
             val vodIndex = (biosState as? nl.thuis.launcher.bios.CatalogState.Ready)?.index
-            val vodFor: (Movie) -> VodItem? = { m -> vodIndex?.find(null, listOfNotNull(m.title, m.originalTitle), m.year) }
+            val vodFor: (Movie) -> VodItem? = { m -> if (m.isSeries) null else vodIndex?.find(null, listOfNotNull(m.title, m.originalTitle), m.year) }
+            // Je serie-aanbod: welke aanbevolen series kun je direct kijken?
+            val seriesState by Series.state.collectAsState()
+            val seriesIndex = (seriesState as? SeriesState.Ready)?.index
+            val seriesFor: (Movie) -> SeriesItem? = { m -> if (!m.isSeries) null else seriesIndex?.find(m.id, listOfNotNull(m.title, m.originalTitle), m.year) }
+            val seriesStore = remember { Series.store(this) }
 
             ThuisTheme {
                 when (screen) {
@@ -123,7 +136,13 @@ class MainActivity : ComponentActivity() {
                         onToggleLike = likes::toggle,
                         onOpenMovie = { detailMovie = it },
                         onOpenLiked = { screen = Screen.LIKED },
-                        isAvailable = { vodFor(it) != null },
+                        isAvailable = { vodFor(it) != null || seriesFor(it) != null },
+                        statusLine = { m ->
+                            seriesFor(m)?.let { s ->
+                                val sum = seriesStore.summaries[s.id]?.takeIf { !it.finished && it.nextLabel.isNotBlank() }
+                                if (sum != null) "In je aanbod  ·  verder met ${sum.nextLabel}" else "In je aanbod"
+                            }
+                        },
                         onOpenSettings = { settingsOpen = true },
                     )
                     Screen.LIKED -> LikedScreen(
@@ -142,14 +161,32 @@ class MainActivity : ComponentActivity() {
                 }
 
                 detailMovie?.let { movie ->
+                    // Een serie in je aanbod: afleveringen ophalen voor "waar je was".
+                    val serie = seriesFor(movie)
+                    val sDetail by produceState<SeriesDetail?>(null, serie?.id) { value = serie?.let { Series.detail(it).getOrNull() } }
+                    val next = sDetail?.let { d -> serie?.let { NextUp.resolve(d.seasons, seriesStore.episodes, seriesStore.lastEpisode(it.id)) } }
                     MovieDetailScreen(
                         movie = movie,
-                        loadDetails = { id -> runCatching { movieApi.details(id) }.getOrNull() },
-                        liked = likes.isLiked(movie.id),
-                        playable = vodFor(movie) != null,
+                        loadDetails = { _ -> runCatching { movieApi.details(movie) }.getOrNull() },
+                        liked = likes.isLiked(movie),
+                        playable = vodFor(movie) != null || serie != null,
                         resumeMs = vodFor(movie)?.let { Bios.progress(this).entries[it.id]?.positionMs } ?: 0L,
                         biosConfigured = Bios.config != null,
-                        onPlay = { m -> vodFor(m)?.let { startActivity(PlayerActivity.intent(this, it)) } },
+                        playLabel = serie?.let { "▶  " + (next?.buttonLabel ?: "Afspelen") },
+                        onEpisodes = serie?.let { s -> { startActivity(BiosActivity.series(this, s.id, episodes = true)) } },
+                        statusText = serie?.let {
+                            "Beschikbaar in je aanbod" +
+                                (next?.takeIf { it.kind == NextUp.Kind.RESUME }?.let { n -> " · je was bij ${timecode(n.resumeMs)} van ${n.episode.label}" } ?: "")
+                        },
+                        onPlay = { m ->
+                            when {
+                                serie != null && next != null ->
+                                    startActivity(PlayerActivity.episodeIntent(this, serie, next.episode, fromStart = next.resumeMs <= 0))
+                                // Afleveringen nog niet binnen: dan het seriescherm in Horizon.
+                                serie != null -> startActivity(BiosActivity.series(this, serie.id, episodes = false))
+                                else -> vodFor(m)?.let { startActivity(PlayerActivity.intent(this, it)) }
+                            }
+                        },
                         onSearchBios = { m -> startActivity(BiosActivity.search(this, m.title)) },
                         onTrailer = ::openTrailer,
                         onToggleLike = likes::toggle,
@@ -188,7 +225,10 @@ class MainActivity : ComponentActivity() {
         if (appsDirty) reloadApps()
         refreshRecs()
         lifecycleScope.launch { channelArt = channels.load() }
-        lifecycleScope.launch { Bios.load(this@MainActivity) }
+        lifecycleScope.launch {
+            Bios.load(this@MainActivity)
+            Series.load(this@MainActivity)
+        }
     }
 
     private fun reloadApps() {
@@ -210,7 +250,11 @@ class MainActivity : ComponentActivity() {
         }
         if (changed.any { it == Secrets.Key.XSERVER || it == Secrets.Key.XUSER || it == Secrets.Key.XPASS }) {
             Bios.reset(this)
-            lifecycleScope.launch { Bios.load(this@MainActivity, force = true) }
+            Series.reset(this)
+            lifecycleScope.launch {
+                Bios.load(this@MainActivity, force = true)
+                Series.load(this@MainActivity, force = true)
+            }
         }
     }
 
@@ -227,7 +271,7 @@ class MainActivity : ComponentActivity() {
     /** Speelt de trailer direct af in YouTube; zonder trailer zoekt YouTube er zelf een. */
     private fun openTrailer(movie: Movie, known: MovieDetails?) {
         lifecycleScope.launch {
-            val key = known?.trailerKey ?: runCatching { movieApi.details(movie.id).trailerKey }.getOrNull()
+            val key = known?.trailerKey ?: runCatching { movieApi.details(movie).trailerKey }.getOrNull()
             if (!openYouTube(this@MainActivity, key, "${movie.title} ${movie.year} trailer")) {
                 Toast.makeText(this@MainActivity, "YouTube kon de trailer niet openen", Toast.LENGTH_SHORT).show()
             }

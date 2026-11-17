@@ -56,3 +56,39 @@ class RecScoringTest {
         assertTrue(result.isEmpty())
     }
 }
+
+class MixedRecsTest {
+    private fun m(id: Int, genres: List<Int>, vote: Double = 7.0, series: Boolean = false) =
+        Movie(id, "Titel $id", "2024", "", "/p$id.jpg", null, genres, vote, 10.0, isSeries = series)
+
+    @Test
+    fun filmsEnSeriesDoorElkaarOpScore() {
+        val films = listOf(m(1, listOf(28)) to 0.9, m(2, listOf(28)) to 0.5)
+        val series = listOf(m(1, listOf(18), series = true) to 0.7, m(3, listOf(18), series = true) to 0.2)
+        val r = RecScoring.mix(films, series)
+        assertEquals(listOf("m1", "tv1", "m2", "tv3"), r.map { it.key })
+    }
+
+    @Test
+    fun filmEnSerieMetHetzelfdeNummerZijnVerschillend() {
+        assertFalse(m(5, emptyList()).key == m(5, emptyList(), series = true).key)
+    }
+
+    @Test
+    fun serieLikesSturenAlleenSeries() {
+        // Een geliketaste serie met genre Drama: de films worden gerangschikt met alleen de film-likes.
+        val liked = listOf(m(900, listOf(18), series = true), m(901, listOf(28)))
+        val (films, series) = RecScoring.splitLikes(liked)
+        assertEquals(listOf(901), films.map { it.id })
+        assertEquals(listOf(900), series.map { it.id })
+    }
+
+    @Test
+    fun rankScoredGeeftDezelfdeVolgordeAlsRank() {
+        val trending = (1..12).map { m(it, listOf(28), vote = 5.0 + it / 10.0) }
+        val a = RecScoring.rank(trending, emptyList(), emptyMap(), emptyList(), emptyMap(), size = 8)
+        val b = RecScoring.rankScored(trending, emptyList(), emptyMap(), emptyList(), emptyMap(), size = 8)
+        assertEquals(a.map { it.id }, b.map { it.first.id })
+        assertTrue(b.zipWithNext().all { (x, y) -> x.second >= y.second })
+    }
+}

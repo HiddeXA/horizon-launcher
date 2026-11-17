@@ -57,6 +57,12 @@ fun MovieDetailScreen(
     onTrailer: (Movie, MovieDetails?) -> Unit,
     onToggleLike: (Movie) -> Unit,
     onDismiss: () -> Unit,
+    /** Bij een serie: tekst op de afspeelknop ("▶  Verder kijken S2 · A4"). */
+    playLabel: String? = null,
+    /** Bij een serie in je aanbod: knop Afleveringen (opent het seriescherm in Horizon). */
+    onEpisodes: (() -> Unit)? = null,
+    /** Groene regel onder de knoppen; null = de gewone tekst voor films. */
+    statusText: String? = null,
 ) {
     val details by produceState<MovieDetails?>(null, movie.id) { value = loadDetails(movie.id) }
     val firstButton = remember { FocusRequester() }
@@ -96,8 +102,13 @@ fun MovieDetailScreen(
 
                 // Jaar · duur · genres · scores
                 Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val years = movie.year.takeIf { it.isNotBlank() }?.let { y ->
+                        val last = d?.lastYear
+                        if (movie.isSeries && last != null && last != y) "$y–$last" else y
+                    }
                     val meta = listOfNotNull(
-                        movie.year.takeIf { it.isNotBlank() },
+                        years,
+                        d?.seasons?.let { if (it == 1) "1 seizoen" else "$it seizoenen" },
                         d?.runtimeMinutes?.let { "${it / 60}u ${it % 60}m" },
                         d?.genres?.take(3)?.joinToString(", ")?.takeIf { it.isNotBlank() },
                     ).joinToString("  ·  ")
@@ -113,7 +124,7 @@ fun MovieDetailScreen(
                 )
 
                 val people = listOfNotNull(
-                    d?.director?.let { "Regie: $it" },
+                    d?.director?.let { if (movie.isSeries) "Bedacht door: $it" else "Regie: $it" },
                     d?.cast?.takeIf { it.isNotEmpty() }?.let { "Met: ${it.joinToString(", ")}" },
                 ).joinToString("   ")
                 if (people.isNotBlank()) {
@@ -124,10 +135,11 @@ fun MovieDetailScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     if (playable) {
                         DetailButton(
-                            if (resumeMs > 0) "▶  Verder kijken" else "▶  Afspelen",
+                            playLabel ?: if (resumeMs > 0) "▶  Verder kijken" else "▶  Afspelen",
                             primary = true,
                             modifier = Modifier.focusRequester(firstButton),
                         ) { onPlay(movie) }
+                        onEpisodes?.let { DetailButton("Afleveringen") { it() } }
                     }
                     DetailButton(
                         label = if (d?.trailerKey != null || d == null) "Trailer" else "Zoek trailer",
@@ -143,7 +155,7 @@ fun MovieDetailScreen(
                 }
                 if (playable) {
                     Text(
-                        "Beschikbaar in je filmaanbod" + if (resumeMs > 0) " · je was bij ${nl.thuis.launcher.bios.timecode(resumeMs)}" else "",
+                        statusText ?: ("Beschikbaar in je filmaanbod" + if (resumeMs > 0) " · je was bij ${nl.thuis.launcher.bios.timecode(resumeMs)}" else ""),
                         fontSize = 13.sp, color = Color(0xFF46D369), modifier = Modifier.padding(top = 12.dp),
                     )
                 }

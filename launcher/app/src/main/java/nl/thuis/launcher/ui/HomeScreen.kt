@@ -93,7 +93,7 @@ fun HomeScreen(
     recs: List<Movie>,
     recMessage: String?,
     channelArt: () -> Map<String, List<ChannelItem>>,
-    isLiked: (Int) -> Boolean,
+    isLiked: (Movie) -> Boolean,
     loadHeroBanner: suspend (AppEntry) -> ImageBitmap?,
     onLaunch: (AppEntry) -> Unit,
     onAppMenu: (AppEntry) -> Unit,
@@ -101,6 +101,8 @@ fun HomeScreen(
     onOpenMovie: (Movie) -> Unit,
     onOpenLiked: () -> Unit,
     isAvailable: (Movie) -> Boolean = { false },
+    /** Extra regel in de top shelf (bij een serie in je aanbod: "In je aanbod · verder met S2 · A4"). */
+    statusLine: (Movie) -> String? = { null },
     onOpenSettings: () -> Unit = {},
 ) {
     val hero = remember { HeroState() }
@@ -149,7 +151,7 @@ fun HomeScreen(
         Column(Modifier.fillMaxSize()) {
             // Sticky top shelf: naam + info van wat focus heeft blijft altijd staan.
             Box(Modifier.fillMaxWidth().height(HeroHeight)) {
-                HeroInfo({ hero.shown }, isLiked, pins)
+                HeroInfo({ hero.shown }, isLiked, statusLine, pins)
                 TopBar(onOpenLiked, onOpenSettings, downTarget = firstFocus)
             }
 
@@ -198,10 +200,10 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = Gutter, vertical = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                         ) {
-                            itemsIndexed(recs, key = { _, m -> m.id }) { i, movie ->
+                            itemsIndexed(recs, key = { _, m -> m.key }) { i, movie ->
                                 PosterCard(
                                     movie = movie,
-                                    liked = isLiked(movie.id),
+                                    liked = isLiked(movie),
                                     onClick = { onOpenMovie(movie) },
                                     onLongClick = { onToggleLike(movie) },
                                     available = isAvailable(movie),
@@ -253,13 +255,13 @@ private val NoAutoScroll = object : BringIntoViewSpec {
 }
 
 @Composable
-private fun HeroInfo(hero: () -> Highlight?, isLiked: (Int) -> Boolean, pins: List<String>) {
+private fun HeroInfo(hero: () -> Highlight?, isLiked: (Movie) -> Boolean, statusLine: (Movie) -> String?, pins: List<String>) {
     Column(
         Modifier.padding(start = Gutter, top = 56.dp).widthIn(max = 470.dp).height(HeroHeight - 70.dp),
         verticalArrangement = Arrangement.Bottom,
     ) {
         when (val h = hero()) {
-            is Highlight.Film -> FilmInfo(h.movie, isLiked(h.movie.id))
+            is Highlight.Film -> FilmInfo(h.movie, isLiked(h.movie), statusLine(h.movie))
             is Highlight.App -> AppInfo(h.app, h.channel, h.app.pinKey in pins)
             null -> Unit
         }
@@ -267,7 +269,7 @@ private fun HeroInfo(hero: () -> Highlight?, isLiked: (Int) -> Boolean, pins: Li
 }
 
 @Composable
-private fun FilmInfo(movie: Movie, liked: Boolean) {
+private fun FilmInfo(movie: Movie, liked: Boolean, status: String?) {
     Text(movie.reason.uppercase(), fontSize = 11.sp, letterSpacing = 1.5.sp, color = Palette.Accent)
     Text(
         movie.title, fontSize = 32.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text,
@@ -283,6 +285,7 @@ private fun FilmInfo(movie: Movie, liked: Boolean) {
         movie.overview, fontSize = 14.sp, color = Palette.TextDim, maxLines = 3,
         overflow = TextOverflow.Ellipsis, lineHeight = 20.sp, modifier = Modifier.padding(top = 10.dp),
     )
+    if (status != null) Text(status, fontSize = 13.sp, color = Color(0xFF46D369), modifier = Modifier.padding(top = 6.dp))
 }
 
 @Composable

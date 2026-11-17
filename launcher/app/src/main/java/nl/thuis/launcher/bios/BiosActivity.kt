@@ -51,7 +51,7 @@ class BiosActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         HorizonColors.palette = HorizonPalette.Twilight   // Roze Hoek kan het palet op roze hebben gezet
         // Startanimatie bij een koude start, behalve als we vanuit de launcher met een zoekopdracht komen.
-        if (intent?.getStringExtra(EXTRA_SEARCH) == null && intent?.getBooleanExtra("probe", false) != true && intent?.getBooleanExtra("probelive", false) != true && intent?.getBooleanExtra("probeseries", false) != true) showIntro()
+        if (intent?.getStringExtra(EXTRA_SEARCH) == null && (intent?.getIntExtra(EXTRA_SERIES, 0) ?: 0) == 0 && intent?.getBooleanExtra("probe", false) != true && intent?.getBooleanExtra("probelive", false) != true && intent?.getBooleanExtra("probeseries", false) != true) showIntro()
         mainTab = if (uiPrefs.getString("tab", null) == BiosSection.SERIES.name) BiosSection.SERIES else BiosSection.HOME
         section = mainTab
         handle(intent)
@@ -66,7 +66,7 @@ class BiosActivity : ComponentActivity() {
                 // Terug op Zoeken, Filter of Mijn lijst: naar de tab waar je vandaan kwam. Op Films of Series sluit Horizon.
                 BackHandler(enabled = section != BiosSection.HOME && section != BiosSection.SERIES) { section = mainTab }
                 Box(Modifier.fillMaxSize()) {
-                    BiosApp(section = section, mainTab = mainTab, onSection = { select(it) }, searchQuery = searchQuery, context = this@BiosActivity, introVisible = introVisible)
+                    BiosApp(section = section, mainTab = mainTab, openSeries = openSeries, onSeriesOpened = { openSeries = null }, onSection = { select(it) }, searchQuery = searchQuery, context = this@BiosActivity, introVisible = introVisible)
                     if (introVisible) HorizonIntro(skip = introSkip) { introVisible = false }
                 }
             }
@@ -118,10 +118,28 @@ class BiosActivity : ComponentActivity() {
             searchQuery = it
             section = BiosSection.SEARCH
         }
+        // Vanuit de launcher: meteen het seriescherm (of de afleveringen) van een serie.
+        val seriesId = intent?.getIntExtra(EXTRA_SERIES, 0) ?: 0
+        if (seriesId != 0) {
+            select(BiosSection.SERIES)
+            openSeries = seriesId to (intent?.getBooleanExtra(EXTRA_EPISODES, false) == true)
+        }
     }
+
+    /** Serie die geopend moet worden zodra de serielijst er is (id, meteen de afleveringen). */
+    private var openSeries by mutableStateOf<Pair<Int, Boolean>?>(null)
 
     companion object {
         const val EXTRA_SEARCH = "search"
+        private const val EXTRA_SERIES = "series"
+        private const val EXTRA_EPISODES = "episodes"
+
+        /** Opent Horizon op het seriescherm van een serie; met [episodes] meteen op de afleveringen. */
+        fun series(context: Context, seriesId: Int, episodes: Boolean) =
+            Intent(context, BiosActivity::class.java)
+                .putExtra(EXTRA_SERIES, seriesId)
+                .putExtra(EXTRA_EPISODES, episodes)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         /** Na zo lang niet gebruikt speelt de startanimatie opnieuw. */
         private const val INTRO_AFTER_MS = 20 * 60 * 1000L
         private var lastStopped = 0L
@@ -133,7 +151,16 @@ class BiosActivity : ComponentActivity() {
 }
 
 @Composable
-private fun BiosApp(section: BiosSection, mainTab: BiosSection, onSection: (BiosSection) -> Unit, searchQuery: String, context: Context, introVisible: Boolean) {
+private fun BiosApp(
+    section: BiosSection,
+    mainTab: BiosSection,
+    openSeries: Pair<Int, Boolean>?,
+    onSeriesOpened: () -> Unit,
+    onSection: (BiosSection) -> Unit,
+    searchQuery: String,
+    context: Context,
+    introVisible: Boolean,
+) {
     val state by Bios.state.collectAsState()
     val progress = remember { Bios.progress(context) }
     val myList = remember { Bios.myList(context) }
@@ -142,6 +169,14 @@ private fun BiosApp(section: BiosSection, mainTab: BiosSection, onSection: (Bios
     val seriesState by Series.state.collectAsState()
     val seriesIdx = (seriesState as? SeriesState.Ready)?.index
     val seriesStore = remember { Series.store(context) }
+    var serieEpisodes by remember { mutableStateOf(false) }
+    LaunchedEffect(openSeries, seriesIdx) {
+        val (id, episodes) = openSeries ?: return@LaunchedEffect
+        val item = seriesIdx?.byId?.get(id) ?: return@LaunchedEffect
+        serieEpisodes = episodes
+        serie = item
+        onSeriesOpened()
+    }
     var settings by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(BiosFilter()) }
     val scope = rememberCoroutineScope()
@@ -226,7 +261,8 @@ private fun BiosApp(section: BiosSection, mainTab: BiosSection, onSection: (Bios
                         Toast.makeText(context, "YouTube kon de trailer niet openen", Toast.LENGTH_SHORT).show()
                     }
                 },
-                onDismiss = { serie = null },
+                onDismiss = { serie = null; serieEpisodes = false },
+                openEpisodes = serieEpisodes,
             )
         }
 
@@ -251,6 +287,12 @@ private fun BiosApp(section: BiosSection, mainTab: BiosSection, onSection: (Bios
         }
     }
 }
+
+/** Series uit de aanbevelingen van de launcher die in je aanbod zitten (rij Aanbevolen series). */
+private fun recommendedSeries(context: Context, idx: SeriesIndex): List<SeriesItem> =
+    Recommender.readCache(context).filter { it.isSeries }
+        .mapNotNull { m -> idx.find(m.id, listOfNotNull(m.title, m.originalTitle), m.year) }
+        .distinctBy { it.id }
 
 /**
  * Tab Series: eigen laad-, lege en foutstaat, los van de films.
@@ -337,7 +379,7 @@ private fun buildRows(
     val continueItems = progress.entries.entries.sortedByDescending { it.value.updated }.mapNotNull { idx.byId[it.key] }
     if (continueItems.isNotEmpty()) rows += BiosRow("continue", "Verder kijken", continueItems, showProgress = true)
 
-    val fromRecs = Recommender.readCache(context).mapNotNull { m ->
+    val fromRecs = Recommender.readCache(context).filterNot { it.isSeries }.mapNotNull { m ->
         idx.find(null, listOfNotNull(m.title, m.originalTitle), m.year)
     }.distinctBy { it.id }
     if (fromRecs.isNotEmpty()) rows += BiosRow("recs", "Aanbevolen voor jou", fromRecs)

@@ -41,23 +41,35 @@ class Recommender(context: Context, private val api: MovieApi) {
 
         return try {
             val today = LocalDate.now()
-            val (trending, classics, similar, genres) = coroutineScope {
-                val t = async { api.trending() }
-                val c = async { api.classics(page = 1 + today.dayOfYear % 3) }
-                val s = liked.take(MAX_SEEDS).map { seed -> async { seed to api.similarTo(seed.id).take(12) } }
-                val g = async { api.genreNames() }
-                Quad(t.await(), c.await(), s.awaitAll().toMap(), g.await())
+            // Films en series apart rangschikken, elk met hun eigen likes; daarna samen op score.
+            val (likedFilms, likedSeries) = RecScoring.splitLikes(liked)
+            val (films, series) = coroutineScope {
+                val f = async {
+                    val (trending, classics, similar, genres) = coroutineScope {
+                        val t = async { api.trending() }
+                        val c = async { api.classics(page = 1 + today.dayOfYear % 3) }
+                        val s = likedFilms.take(MAX_SEEDS).map { seed -> async { seed to api.similarTo(seed.id).take(12) } }
+                        val g = async { api.genreNames() }
+                        Quad(t.await(), c.await(), s.awaitAll().toMap(), g.await())
+                    }
+                    RecScoring.rankScored(trending, classics, similar, likedFilms, genres, random = Random(today.toEpochDay()))
+                }
+                // Lukt het voor series niet, dan blijven de films gewoon staan.
+                val s = async {
+                    runCatching {
+                        val (trending, classics, similar, genres) = coroutineScope {
+                            val t = async { api.trendingTv() }
+                            val c = async { api.classicsTv(page = 1 + today.dayOfYear % 3) }
+                            val sim = likedSeries.take(MAX_SEEDS).map { seed -> async { seed to api.similarToTv(seed.id).take(12) } }
+                            val g = async { api.genreNamesTv() }
+                            Quad(t.await(), c.await(), sim.awaitAll().toMap(), g.await())
+                        }
+                        RecScoring.rankScored(trending, classics, similar, likedSeries, genres, size = SERIES_SIZE, minClassics = 3, random = Random(today.toEpochDay() + 1))
+                    }.getOrDefault(emptyList())
+                }
+                f.await() to s.await()
             }
-
-            val ranked = RecScoring.rank(
-                trending = trending,
-                classics = classics,
-                similar = similar,
-                liked = liked,
-                genreNames = genres,
-                random = Random(today.toEpochDay()),
-            )
-            val enriched = enrich(ranked)
+            val enriched = enrich(RecScoring.mix(films, series))
 
             prefs.edit()
                 .putString("json", enriched.toJsonArray().toString())
@@ -76,7 +88,7 @@ class Recommender(context: Context, private val api: MovieApi) {
         movies.chunked(5).flatMap { chunk ->
             chunk.map { m ->
                 async {
-                    ratingsPrefs.getString(m.id.toString(), null)?.let { cachedRatings ->
+                    ratingsPrefs.getString(ratingsKey(m), null)?.let { cachedRatings ->
                         val o = JSONObject(cachedRatings)
                         return@async m.copy(
                             imdbId = o.optStringOrNull("id"),
@@ -85,11 +97,11 @@ class Recommender(context: Context, private val api: MovieApi) {
                         )
                     }
                     runCatching {
-                        val imdbId = api.imdbId(m.id) ?: return@runCatching m
+                        val imdbId = api.imdbId(m) ?: return@runCatching m
                         val (imdb, rt) = api.ratings(imdbId)
                         if (api.hasOmdb) {
                             ratingsPrefs.edit().putString(
-                                m.id.toString(),
+                                ratingsKey(m),
                                 JSONObject().put("id", imdbId).put("imdb", imdb).put("rt", rt).toString(),
                             ).apply()
                         }
@@ -100,6 +112,9 @@ class Recommender(context: Context, private val api: MovieApi) {
         }
     }
 
+    /** Films houden hun oude sleutel (het nummer), series krijgen "tv<nummer>". */
+    private fun ratingsKey(m: Movie) = if (m.isSeries) m.key else m.id.toString()
+
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
 
     companion object {
@@ -108,89 +123,9 @@ class Recommender(context: Context, private val api: MovieApi) {
             JSONArray(context.getSharedPreferences("recs", Context.MODE_PRIVATE).getString("json", "[]")).toMovies()
         }.getOrDefault(emptyList())
 
-        private const val CACHE_VERSION = 2
+        private const val CACHE_VERSION = 3
+        private const val SERIES_SIZE = 10
         private const val CACHE_MS = 6 * 60 * 60 * 1000L
         private const val MAX_SEEDS = 6
-    }
-}
-
-/** Pure rangschik-logica, los van netwerk en Android zodat hij te testen is. */
-object RecScoring {
-
-    private class Candidate(val movie: Movie) {
-        var trendingRank: Int? = null
-        var classic = false
-        val becauseOf = mutableListOf<String>()
-    }
-
-    fun rank(
-        trending: List<Movie>,
-        classics: List<Movie>,
-        similar: Map<Movie, List<Movie>>,
-        liked: List<Movie>,
-        genreNames: Map<Int, String>,
-        size: Int = 20,
-        minClassics: Int = 5,
-        random: Random = Random(0),
-    ): List<Movie> {
-        val likedIds = liked.map { it.id }.toSet()
-        val genreWeight = genreWeights(liked)
-
-        val cands = LinkedHashMap<Int, Candidate>()
-        fun add(m: Movie) = cands.getOrPut(m.id) { Candidate(m) }
-
-        trending.forEachIndexed { i, m -> add(m).trendingRank = i }
-        classics.forEach { add(it).classic = true }
-        similar.forEach { (seed, list) -> list.forEach { add(it).becauseOf += seed.title } }
-
-        val scored = cands.values
-            .filter { it.movie.id !in likedIds && it.movie.posterPath != null }
-            .map { c ->
-                val affinity = affinity(c.movie, genreWeight)
-                val score = 0.30 * (c.movie.voteAverage / 10.0).coerceIn(0.0, 1.0) +
-                    0.20 * (c.trendingRank?.let { 1.0 - it.toDouble() / trending.size } ?: if (c.classic) 0.4 else 0.0) +
-                    0.30 * affinity +
-                    0.20 * (c.becauseOf.size / 2.0).coerceAtMost(1.0) +
-                    0.05 * random.nextDouble() // kleine dagelijkse variatie
-                Triple(c, score, affinity)
-            }
-            .sortedByDescending { it.second }
-
-        // Altijd een paar klassiekers erin, ook als trending hoger scoort.
-        val picked = scored.filter { it.first.classic }.take(minClassics).toMutableList()
-        for (s in scored) {
-            if (picked.size >= size) break
-            if (s !in picked) picked += s
-        }
-
-        return picked.sortedByDescending { it.second }.map { (c, _, affinity) ->
-            c.movie.copy(reason = reason(c, affinity, genreWeight, genreNames))
-        }
-    }
-
-    /** Per genre: hoe vaak komt het voor in je likes, geschaald naar 0..1. */
-    fun genreWeights(liked: List<Movie>): Map<Int, Double> {
-        val counts = liked.flatMap { it.genreIds }.groupingBy { it }.eachCount()
-        val max = counts.values.maxOrNull()?.toDouble() ?: return emptyMap()
-        return counts.mapValues { it.value / max }
-    }
-
-    fun affinity(movie: Movie, weights: Map<Int, Double>): Double {
-        if (weights.isEmpty() || movie.genreIds.isEmpty()) return 0.0
-        val w = movie.genreIds.map { weights[it] ?: 0.0 }
-        return 0.7 * w.max() + 0.3 * w.average()
-    }
-
-    private fun reason(c: Candidate, affinity: Double, weights: Map<Int, Double>, names: Map<Int, String>): String {
-        val m = c.movie
-        return when {
-            c.becauseOf.isNotEmpty() -> "Omdat je ${c.becauseOf.first()} leuk vond"
-            affinity >= 0.5 -> {
-                val top = m.genreIds.maxByOrNull { weights[it] ?: 0.0 }
-                "Past bij je smaak: ${names[top]?.lowercase() ?: "jouw genres"}"
-            }
-            c.classic -> "Klassieker uit ${m.year}"
-            else -> "Populair deze week"
-        }
     }
 }

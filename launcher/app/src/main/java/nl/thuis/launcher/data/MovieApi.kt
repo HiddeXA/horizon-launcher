@@ -26,6 +26,9 @@ data class MovieDetails(
     /** YouTube-videocode van de trailer, of null als TMDB er geen heeft. */
     val trailerKey: String?,
     val originalTitle: String?,
+    /** Alleen bij series: aantal seizoenen (zonder Specials) en het jaar van de laatste uitzending. */
+    val seasons: Int? = null,
+    val lastYear: String? = null,
 )
 
 class MovieApi(
@@ -100,6 +103,60 @@ class MovieApi(
         )
     }
 
+    // --- Series (TMDB "tv") ---
+
+    suspend fun trendingTv(): List<Movie> = tmdb("trending/tv/week").tvResults()
+
+    /** Hoog gewaardeerde series met veel stemmen, begonnen vóór 2011: de "klassiekers". */
+    suspend fun classicsTv(page: Int): List<Movie> =
+        tmdb("discover/tv",
+            "sort_by" to "vote_average.desc",
+            "vote_count.gte" to "1500",
+            "first_air_date.lte" to "2010-12-31",
+            "page" to page.toString(),
+        ).tvResults()
+
+    suspend fun similarToTv(tvId: Int): List<Movie> = tmdb("tv/$tvId/recommendations").tvResults()
+
+    suspend fun genreNamesTv(): Map<Int, String> {
+        val arr = tmdb("genre/tv/list").optJSONArray("genres") ?: return emptyMap()
+        return (0 until arr.length()).associate { val g = arr.getJSONObject(it); g.getInt("id") to g.getString("name") }
+    }
+
+    /** Details voor een film of een serie. */
+    suspend fun details(movie: Movie): MovieDetails = if (movie.isSeries) tvDetails(movie.id) else details(movie.id)
+
+    /** Seriescherm: seizoenen, genres, makers, cast en de trailer. */
+    suspend fun tvDetails(tvId: Int): MovieDetails {
+        val o = tmdb("tv/$tvId", "append_to_response" to "credits,videos", "include_video_language" to "nl,en,null")
+        val genres = o.optJSONArray("genres")?.let { a -> (0 until a.length()).map { a.getJSONObject(it).getString("name") } }.orEmpty()
+        val creator = o.optJSONArray("created_by")?.let { a -> if (a.length() > 0) a.getJSONObject(0).optString("name").ifBlank { null } else null }
+        val cast = o.optJSONObject("credits")?.optJSONArray("cast")?.let { a -> (0 until minOf(4, a.length())).map { a.getJSONObject(it).getString("name") } }.orEmpty()
+        val videos = o.optJSONObject("videos")?.optJSONArray("results")?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
+            .filter { it.optString("site") == "YouTube" && it.optString("key").isNotBlank() }
+        val trailer = videos.sortedWith(
+            compareBy<JSONObject>(
+                { if (it.optString("type") == "Trailer") 0 else if (it.optString("type") == "Teaser") 1 else 2 },
+                { when (it.optString("iso_639_1")) { "nl" -> 0; "en" -> 1; else -> 2 } },
+            )
+        ).firstOrNull()?.optString("key")
+        val seasons = o.optJSONArray("seasons")?.let { a -> (0 until a.length()).count { a.getJSONObject(it).optInt("season_number", 0) > 0 } }
+        return MovieDetails(
+            runtimeMinutes = null,
+            genres = genres,
+            tagline = o.optStringOrNull("tagline"),
+            director = creator,
+            cast = cast,
+            trailerKey = trailer,
+            originalTitle = o.optStringOrNull("original_name"),
+            seasons = seasons?.takeIf { it > 0 } ?: o.optInt("number_of_seasons", 0).takeIf { it > 0 },
+            lastYear = o.optString("last_air_date").take(4).ifBlank { null },
+        )
+    }
+
+    suspend fun imdbId(movie: Movie): String? =
+        if (movie.isSeries) tmdb("tv/${movie.id}/external_ids").optStringOrNull("imdb_id") else imdbId(movie.id)
+
     suspend fun genreNames(): Map<Int, String> {
         val arr = tmdb("genre/movie/list").optJSONArray("genres") ?: return emptyMap()
         return (0 until arr.length()).associate {
@@ -125,6 +182,11 @@ class MovieApi(
                 ?.optStringOrNull("Value")
         }
         return json.optStringOrNull("imdbRating") to rt
+    }
+
+    private fun JSONObject.tvResults(): List<Movie> {
+        val arr = optJSONArray("results") ?: return emptyList()
+        return (0 until arr.length()).map { Movie.fromTmdbTv(arr.getJSONObject(it)) }
     }
 
     private fun JSONObject.results(): List<Movie> {

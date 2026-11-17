@@ -21,7 +21,12 @@ data class Movie(
     val rtScore: String? = null,
     val reason: String = "",
     val originalTitle: String? = null,
+    /** Een serie (TMDB "tv") in plaats van een film. Film- en serienummers bij TMDB kunnen gelijk zijn. */
+    val isSeries: Boolean = false,
 ) {
+    /** Unieke sleutel over films en series heen (voor likes en lijsten). */
+    val key: String get() = if (isSeries) "tv$id" else "m$id"
+
     val posterUrl get() = posterPath?.let { "https://image.tmdb.org/t/p/w342$it" }
     val backdropUrl get() = backdropPath?.let { "https://image.tmdb.org/t/p/w1280$it" }
 
@@ -33,6 +38,7 @@ data class Movie(
         .put("imdbId", imdbId).put("imdb", imdbRating).put("rt", rtScore)
         .put("reason", reason)
         .put("orig", originalTitle)
+        .put("tv", isSeries)
 
     companion object {
         fun fromJson(o: JSONObject) = Movie(
@@ -50,6 +56,22 @@ data class Movie(
             rtScore = o.optStringOrNull("rt"),
             reason = o.optString("reason"),
             originalTitle = o.optStringOrNull("orig"),
+            isSeries = o.optBoolean("tv"),
+        )
+
+        /** Leest één serie uit een TMDB-resultaat (trending, discover, recommendations voor tv). */
+        fun fromTmdbTv(o: JSONObject) = Movie(
+            id = o.getInt("id"),
+            title = o.optString("name", o.optString("original_name")),
+            year = o.optString("first_air_date").take(4),
+            overview = o.optString("overview"),
+            posterPath = o.optStringOrNull("poster_path"),
+            backdropPath = o.optStringOrNull("backdrop_path"),
+            genreIds = o.optJSONArray("genre_ids").toIntList(),
+            voteAverage = o.optDouble("vote_average", 0.0),
+            popularity = o.optDouble("popularity", 0.0),
+            originalTitle = o.optStringOrNull("original_name"),
+            isSeries = true,
         )
 
         /** Leest één film uit een TMDB-resultaat (trending, discover, recommendations). */

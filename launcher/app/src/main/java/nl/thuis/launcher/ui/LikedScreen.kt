@@ -28,7 +28,7 @@ import nl.thuis.launcher.data.Movie
 @Composable
 fun LikedScreen(
     liked: List<Movie>,
-    isLiked: (Int) -> Boolean,
+    isLiked: (Movie) -> Boolean,
     onToggleLike: (Movie) -> Unit,
     onOpenMovie: (Movie) -> Unit,
 ) {
@@ -40,11 +40,11 @@ fun LikedScreen(
     Column(Modifier.fillMaxSize().background(Palette.Background).padding(horizontal = 48.dp, vertical = 32.dp)) {
         Text("Vind ik leuk", fontSize = 28.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
         Text(
-            "${shown.size} films · deze lijst stuurt je aanbevelingen · OK = details · lang OK = (niet meer) leuk",
+            likedCount(shown) + " · deze lijst stuurt je aanbevelingen · OK = details · lang OK = (niet meer) leuk",
             fontSize = 13.sp, color = Palette.TextDim, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
         if (shown.isEmpty()) {
-            Text("Nog niets. Houd OK ingedrukt op een aanbeveling, of kies ♥ op het filmscherm.", color = Palette.TextDim)
+            Text("Nog niets. Houd OK ingedrukt op een aanbeveling, of kies ♥ op het film- of seriescherm.", color = Palette.TextDim)
         }
         LazyVerticalGrid(
             columns = GridCells.Adaptive(112.dp),
@@ -53,10 +53,10 @@ fun LikedScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier.weight(1f),
         ) {
-            itemsIndexed(shown, key = { _, m -> m.id }) { i, movie ->
+            itemsIndexed(shown, key = { _, m -> m.key }) { i, movie ->
                 PosterCard(
                     movie = movie,
-                    liked = isLiked(movie.id),
+                    liked = isLiked(movie),
                     onClick = { onOpenMovie(movie) },
                     onLongClick = { onToggleLike(movie) },
                     onFocused = {},
@@ -66,8 +66,21 @@ fun LikedScreen(
         }
         // Verplichte bronvermelding van TMDB.
         Text(
-            "Filmdata en posters: TMDB. Dit product gebruikt de TMDB API maar is niet goedgekeurd of gecertificeerd door TMDB. Scores: OMDb.",
+            "Film- en seriedata en posters: TMDB. Dit product gebruikt de TMDB API maar is niet goedgekeurd of gecertificeerd door TMDB. Scores: OMDb.",
             fontSize = 11.sp, color = Palette.TextDim,
         )
+    }
+}
+
+/** "6 films en 3 series", "1 film", "2 series" … */
+private fun likedCount(list: List<Movie>): String {
+    val series = list.count { it.isSeries }
+    val films = list.size - series
+    val f = if (films == 1) "1 film" else "$films films"
+    val s = if (series == 1) "1 serie" else "$series series"
+    return when {
+        series == 0 -> f
+        films == 0 -> s
+        else -> "$f en $s"
     }
 }
