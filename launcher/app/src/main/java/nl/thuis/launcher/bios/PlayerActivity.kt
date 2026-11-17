@@ -540,7 +540,12 @@ class PlayerActivity : ComponentActivity() {
 
     private fun flushTaste() {
         countWatched()
-        if (episode != null) { watchedMs = 0; return }
+        if (episode != null) {
+            val s = seriesItem
+            if (s != null && watchedMs >= 3 * 60_000) Series.recordTaste(this, s, Taste.watchWeight(watchedMs / 60_000.0))
+            watchedMs = 0
+            return
+        }
         val item = Bios.index?.byId?.get(itemId) ?: return
         if (watchedMs >= 3 * 60_000) Bios.recordTaste(this, item, Taste.watchWeight(watchedMs / 60_000.0))
         watchedMs = 0

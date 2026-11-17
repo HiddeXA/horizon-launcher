@@ -2,7 +2,6 @@ package nl.thuis.launcher.bios
 
 import android.content.Context
 import android.util.Log
-import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -19,40 +18,6 @@ import org.json.JSONObject
 import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
-
-/** TMDB-genres voor series (andere lijst dan voor films), met Nederlandse namen. */
-enum class TvGenre(val id: Int, val label: String) {
-    ACTION(10759, "Actie & Avontuur"), ANIMATION(16, "Animatie"), COMEDY(35, "Komedie"), CRIME(80, "Misdaad"),
-    DOCUMENTARY(99, "Documentaire"), DRAMA(18, "Drama"), FAMILY(10751, "Familie"), KIDS(10762, "Kids"),
-    MYSTERY(9648, "Mysterie"), REALITY(10764, "Reality"), SCIFI(10765, "Sci-Fi & Fantasy"), SOAP(10766, "Soap"),
-    TALK(10767, "Talkshow"), WAR(10768, "Oorlog & Politiek"), WESTERN(37, "Western");
-
-    companion object {
-        val byId = entries.associateBy { it.id }
-    }
-}
-
-/** Een rij op de tab Series. Top series staat altijd bovenaan; de rest wordt op kijkgedrag gesorteerd. */
-@Immutable
-data class SeriesShelf(val key: String, val title: String, val kind: ShelfKind, val genres: List<TvGenre> = emptyList(), val pinned: Boolean = false)
-
-val SeriesShelves: List<SeriesShelf> = listOf(
-    SeriesShelf("top", "Top series", ShelfKind.TOP, pinned = true),
-    SeriesShelf("popular", "Populair nu", ShelfKind.POPULAR),
-    SeriesShelf("drama", "Drama", ShelfKind.GENRE, listOf(TvGenre.DRAMA)),
-    SeriesShelf("crime", "Misdaad", ShelfKind.GENRE, listOf(TvGenre.CRIME)),
-    SeriesShelf("comedy", "Komedie", ShelfKind.GENRE, listOf(TvGenre.COMEDY)),
-    SeriesShelf("action", "Actie & Avontuur", ShelfKind.GENRE, listOf(TvGenre.ACTION)),
-    SeriesShelf("scifi", "Sci-Fi & Fantasy", ShelfKind.GENRE, listOf(TvGenre.SCIFI)),
-    SeriesShelf("mystery", "Mysterie", ShelfKind.GENRE, listOf(TvGenre.MYSTERY)),
-    SeriesShelf("documentary", "Documentaires", ShelfKind.GENRE, listOf(TvGenre.DOCUMENTARY)),
-    SeriesShelf("animation", "Animatie", ShelfKind.GENRE, listOf(TvGenre.ANIMATION)),
-    SeriesShelf("family", "Familie", ShelfKind.GENRE, listOf(TvGenre.FAMILY)),
-    SeriesShelf("kids", "Kids", ShelfKind.GENRE, listOf(TvGenre.KIDS)),
-    SeriesShelf("reality", "Reality", ShelfKind.GENRE, listOf(TvGenre.REALITY)),
-    SeriesShelf("war", "Oorlog & Politiek", ShelfKind.GENRE, listOf(TvGenre.WAR)),
-    SeriesShelf("western", "Western", ShelfKind.GENRE, listOf(TvGenre.WESTERN)),
-)
 
 /**
  * Rijen voor de tab Series via TMDB: per rij de populairste series met dat genre, waarvan we houden
@@ -87,14 +52,14 @@ object SeriesGenres {
             SeriesShelves.map { shelf ->
                 async {
                     gate.withPermit {
-                        val want = if (shelf.kind == ShelfKind.TOP) 100 else 40
-                        val maxPages = if (shelf.kind == ShelfKind.TOP) 20 else 5
+                        val want = if (shelf.kind == SeriesShelfKind.TOP) 100 else 40
+                        val maxPages = if (shelf.kind == SeriesShelfKind.TOP) 20 else 5
                         val ids = ArrayList<Int>()
                         for (page in 1..maxPages) {
                             val list = runCatching {
                                 when (shelf.kind) {
-                                    ShelfKind.TOP -> discover(emptyList(), page, "vote_average.desc", minVotes = 1500)
-                                    ShelfKind.POPULAR -> discover(emptyList(), page, "popularity.desc", minVotes = 80, fromYear = thisYear - 2)
+                                    SeriesShelfKind.TOP -> discover(emptyList(), page, "vote_average.desc", minVotes = 1500)
+                                    SeriesShelfKind.POPULAR -> discover(emptyList(), page, "popularity.desc", minVotes = 80, fromYear = thisYear - 2)
                                     else -> discover(shelf.genres.map { it.id }, page, "popularity.desc", minVotes = 50)
                                 }
                             }.getOrNull() ?: break
@@ -139,6 +104,26 @@ object SeriesGenres {
             FilterSort.NEWEST -> list.sortedByDescending { it.modified }
             else -> list
         }
+    }
+
+    /** Filter zonder genres: rechtstreeks op je aanbod (zelfde regels als [filterCatalog] voor films). */
+    fun filterCatalog(index: SeriesIndex, f: BiosFilter, limit: Int = 120): List<SeriesItem> {
+        val seq = index.items.asSequence().filter { item ->
+            val y = (item.year ?: meta[item.id]?.year)?.toIntOrNull()
+            val inPeriod = when {
+                f.period == FilterPeriod.ALL -> true
+                y == null -> false
+                else -> (f.period.from == null || y >= f.period.from) && (f.period.to == null || y <= f.period.to)
+            }
+            val score = item.rating ?: meta[item.id]?.vote
+            inPeriod && (f.minScore == 0.0 || (score != null && score >= f.minScore))
+        }.distinctBy { it.key + (it.year ?: "") }
+        return when (f.sort) {
+            FilterSort.AZ -> seq.sortedBy { it.title.lowercase() }
+            FilterSort.RATING -> seq.sortedByDescending { it.rating ?: meta[it.id]?.vote ?: 0.0 }
+            FilterSort.POPULAR -> seq.sortedByDescending { meta[it.id]?.popularity ?: (it.modified / 1e9) }
+            FilterSort.NEWEST -> seq.sortedByDescending { it.modified }
+        }.take(limit).toList()
     }
 
     /** TMDB-genres van één serie (voor je kijkprofiel). */

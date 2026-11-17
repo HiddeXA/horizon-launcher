@@ -43,28 +43,52 @@ import kotlinx.coroutines.withContext
 @Composable
 fun BiosFilterScreen(
     index: VodIndex,
+    series: SeriesIndex?,
+    store: SeriesStore,
     filter: BiosFilter,
     onFilter: (BiosFilter) -> Unit,
     onOpen: (VodItem) -> Unit,
+    onOpenSeries: (SeriesItem) -> Unit,
     firstFocus: FocusRequester,
 ) {
-    var results by remember { mutableStateOf<List<VodItem>?>(null) }
-    LaunchedEffect(filter, index) {
+    var results by remember { mutableStateOf<List<Listing>?>(null) }
+    LaunchedEffect(filter, index, series) {
         results = null
         delay(350) // wacht tot je klaar bent met kiezen
-        results = if (filter.genres.isNotEmpty() && BiosGenres.hasTmdb) BiosGenres.filter(index, filter)
-        else withContext(Dispatchers.Default) { filterCatalog(index, filter) }
+        results = if (filter.series) {
+            val idx = series ?: return@LaunchedEffect
+            val ids = filter.tvGenres.map { it.id }
+            (if (ids.isNotEmpty() && SeriesGenres.hasTmdb) SeriesGenres.filter(idx, ids, filter.period, filter.minScore, filter.sort)
+            else withContext(Dispatchers.Default) { SeriesGenres.filterCatalog(idx, filter) }).map { Listing.Show(it) }
+        } else {
+            (if (filter.genres.isNotEmpty() && BiosGenres.hasTmdb) BiosGenres.filter(index, filter)
+            else withContext(Dispatchers.Default) { filterCatalog(index, filter) }).map { Listing.Film(it) }
+        }
     }
+    val what = if (filter.series) "series" else "films"
 
     Row(Modifier.fillMaxSize().padding(start = ContentStart, top = NavHeight + 4.dp, end = 32.dp)) {
         Column(Modifier.width(430.dp).verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
-            Group("Genres" + if (filter.genres.size > 1) "  ·  films die alle gekozen genres hebben" else "")
+            Group("Soort")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Pill("Films", !filter.series, modifier = if (!filter.series) Modifier.focusRequester(firstFocus) else Modifier) { onFilter(filter.switchTo(false)) }
+                Pill("Series", filter.series, modifier = if (filter.series) Modifier.focusRequester(firstFocus) else Modifier) { onFilter(filter.switchTo(true)) }
+            }
+            val chosen = if (filter.series) filter.tvGenres.size else filter.genres.size
+            Group("Genres" + if (chosen > 1) "  ·  $what die alle gekozen genres hebben" else "")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Genre.entries.forEachIndexed { i, g ->
-                    Pill(
-                        g.label, selected = g in filter.genres,
-                        modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier,
-                    ) { onFilter(filter.copy(genres = if (g in filter.genres) filter.genres - g else filter.genres + g)) }
+                if (filter.series) {
+                    TvGenre.entries.forEach { g ->
+                        Pill(g.label, selected = g in filter.tvGenres) {
+                            onFilter(filter.copy(tvGenres = if (g in filter.tvGenres) filter.tvGenres - g else filter.tvGenres + g))
+                        }
+                    }
+                } else {
+                    Genre.entries.forEach { g ->
+                        Pill(g.label, selected = g in filter.genres) {
+                            onFilter(filter.copy(genres = if (g in filter.genres) filter.genres - g else filter.genres + g))
+                        }
+                    }
                 }
             }
             Group("Periode")
@@ -82,7 +106,7 @@ fun BiosFilterScreen(
                 FilterSort.entries.forEach { s -> Pill(s.label, s == filter.sort) { onFilter(filter.copy(sort = s)) } }
             }
             if (!filter.isEmpty || filter.sort != FilterSort.POPULAR) {
-                Row(Modifier.padding(top = 18.dp)) { Pill("✕  Alles wissen", false) { onFilter(BiosFilter()) } }
+                Row(Modifier.padding(top = 18.dp)) { Pill("✕  Alles wissen", false) { onFilter(BiosFilter(series = filter.series)) } }
             }
         }
 
@@ -90,13 +114,14 @@ fun BiosFilterScreen(
             val r = results
             Text(
                 when {
+                    r == null && filter.series && series == null -> "Series laden…"
                     r == null -> "Zoeken…"
-                    r.isEmpty() -> "Geen films gevonden met deze keuzes"
-                    else -> "${r.size} films" + if (r.size >= 60 && filter.genres.isNotEmpty()) " (de bekendste)" else ""
+                    r.isEmpty() -> "Geen $what gevonden met deze keuzes"
+                    else -> "${r.size} $what" + if (r.size >= 60 && (filter.genres.isNotEmpty() || filter.tvGenres.isNotEmpty())) " (de bekendste)" else ""
                 },
                 color = HorizonColors.Dim, fontSize = 15.sp, fontWeight = FontWeight.Medium,
             )
-            if (filter.genres.isNotEmpty() && !BiosGenres.hasTmdb) {
+            if ((filter.genres.isNotEmpty() || filter.tvGenres.isNotEmpty()) && !BiosGenres.hasTmdb) {
                 Text("Voor filteren op genre is een TMDB-token nodig (Instellingen).", color = HorizonColors.Accent, fontSize = 13.sp)
             }
             LazyVerticalGrid(
@@ -105,8 +130,8 @@ fun BiosFilterScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(r.orEmpty(), key = { it.id }) { item ->
-                    VodTile(item, onClick = { onOpen(item) }, onFocused = {}, width = 100.dp)
+                items(r.orEmpty(), key = { it.listKey }) { item ->
+                    ListingTile(item, store, width = 100.dp, onOpen = onOpen, onOpenSeries = onOpenSeries)
                 }
             }
         }

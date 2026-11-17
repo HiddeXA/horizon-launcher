@@ -46,15 +46,18 @@ private val Keys = ("abcdefghijklmnopqrstuvwxyz1234567890").map { it.toString() 
 @Composable
 fun BiosSearch(
     index: VodIndex,
+    series: SeriesIndex?,
+    store: SeriesStore,
     initialQuery: String,
     onOpen: (VodItem) -> Unit,
+    onOpenSeries: (SeriesItem) -> Unit,
     firstFocus: FocusRequester,
 ) {
     var query by remember(initialQuery) { mutableStateOf(initialQuery.lowercase()) }
-    var results by remember { mutableStateOf(emptyList<VodItem>()) }
-    LaunchedEffect(query, index) {
+    var results by remember { mutableStateOf(emptyList<Listing>()) }
+    LaunchedEffect(query, index, series) {
         delay(120) // pas zoeken als je even stopt met typen
-        results = withContext(Dispatchers.Default) { index.search(query) }
+        results = withContext(Dispatchers.Default) { Listings.search(index, series, query) }
     }
 
     Row(Modifier.fillMaxSize().padding(start = ContentStart, top = NavHeight + 8.dp, end = 32.dp)) {
@@ -64,7 +67,7 @@ fun BiosSearch(
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Text(
-                    if (query.isEmpty()) "Zoek een film…" else query + "▏",
+                    if (query.isEmpty()) "Zoek een film of serie…" else query + "▏",
                     color = if (query.isEmpty()) HorizonColors.Dim else HorizonColors.Text,
                     fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
@@ -92,7 +95,8 @@ fun BiosSearch(
         Column(Modifier.padding(start = 28.dp).fillMaxSize()) {
             Text(
                 when {
-                    query.isBlank() -> "Typ een titel om te zoeken in ${index.items.size} films"
+                    query.isBlank() -> "Typ een titel om te zoeken in ${"%,d".format(index.items.size).replace(',', '.')} films" +
+                        (series?.let { " en ${"%,d".format(it.items.size).replace(',', '.')} series" } ?: "")
                     results.isEmpty() -> "Niets gevonden voor \"$query\""
                     else -> "Resultaten"
                 },
@@ -104,8 +108,8 @@ fun BiosSearch(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                items(results, key = { it.id }) { item ->
-                    VodTile(item, onClick = { onOpen(item) }, onFocused = {}, width = 100.dp)
+                items(results, key = { it.listKey }) { r ->
+                    ListingTile(r, store, width = 100.dp, onOpen = onOpen, onOpenSeries = onOpenSeries)
                 }
             }
         }
@@ -132,13 +136,38 @@ private fun Key(label: String, modifier: Modifier, onClick: () -> Unit) {
     }
 }
 
-/** Mijn lijst: een eenvoudig raster. */
+/** Tegel voor een film of een serie; series krijgen de band "Nieuwe aflevering" als die van toepassing is. */
 @Composable
-fun BiosMyList(items: List<VodItem>, onOpen: (VodItem) -> Unit, firstFocus: FocusRequester) {
+fun ListingTile(
+    r: Listing,
+    store: SeriesStore,
+    width: androidx.compose.ui.unit.Dp,
+    onOpen: (VodItem) -> Unit,
+    onOpenSeries: (SeriesItem) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (r) {
+        is Listing.Film -> VodTile(r.item, onClick = { onOpen(r.item) }, onFocused = {}, width = width, modifier = modifier)
+        is Listing.Show -> SeriesTile(
+            r.item, onClick = { onOpenSeries(r.item) }, onFocused = {}, width = width, modifier = modifier,
+            band = newEpisodeBand(r.item, store),
+        )
+    }
+}
+
+/** Mijn lijst: films en series in één raster, laatst toegevoegd eerst. */
+@Composable
+fun BiosMyList(
+    items: List<Listing>,
+    store: SeriesStore,
+    onOpen: (VodItem) -> Unit,
+    onOpenSeries: (SeriesItem) -> Unit,
+    firstFocus: FocusRequester,
+) {
     Column(Modifier.fillMaxSize().padding(start = ContentStart, top = NavHeight + 8.dp, end = 32.dp)) {
         Text("Mijn lijst", fontSize = 28.sp, fontWeight = FontWeight.Black, color = HorizonColors.Text)
         if (items.isEmpty()) {
-            EmptyMessage("Je lijst is nog leeg", "Kies op een filmscherm \"+ Mijn lijst\" om films te bewaren voor later.")
+            EmptyMessage("Je lijst is nog leeg", "Kies op een film- of seriescherm \"+ Mijn lijst\" om iets te bewaren voor later.")
             return@Column
         }
         LazyVerticalGrid(
@@ -147,10 +176,9 @@ fun BiosMyList(items: List<VodItem>, onOpen: (VodItem) -> Unit, firstFocus: Focu
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            items(items.size, key = { items[it].id }) { i ->
-                val item = items[i]
-                VodTile(
-                    item, onClick = { onOpen(item) }, onFocused = {}, width = 110.dp,
+            items(items.size, key = { items[it].listKey }) { i ->
+                ListingTile(
+                    items[i], store, width = 110.dp, onOpen = onOpen, onOpenSeries = onOpenSeries,
                     modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier,
                 )
             }

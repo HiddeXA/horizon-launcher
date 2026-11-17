@@ -58,6 +58,12 @@ fun SeriesDetailScreen(
     var attempt by remember { mutableIntStateOf(0) }
     var result by remember(item.id) { mutableStateOf<Result<SeriesDetail>?>(Series.cachedDetail(item.id)?.let { Result.success(it) }) }
     var episodesOpen by remember(item.id) { mutableStateOf(openEpisodes) }
+    // Vorig bezoek, vóórdat we het bijwerken: afleveringen die daarna zijn toegevoegd zijn "Nieuw".
+    val newSince = remember(item.id) {
+        val sum = store.summaries[item.id]
+        if (NewEpisodes.hasNew(item, sum, store.inMyList(item.id))) sum?.seenAt else null
+    }
+    LaunchedEffect(item.id) { Series.recordTaste(context, item, Taste.OPEN_DETAIL) }
 
     LaunchedEffect(item.id, attempt) {
         if (result?.isSuccess != true || attempt > 0) {
@@ -148,7 +154,10 @@ fun SeriesDetailScreen(
                             BiosButton("Afleveringen") { episodesOpen = true }
                         }
                     }
-                    BiosButton(if (inMyList) "✓  Mijn lijst" else "+  Mijn lijst", modifier = Modifier.focusRequester(list)) { store.toggleMyList(item.id) }
+                    BiosButton(if (inMyList) "✓  Mijn lijst" else "+  Mijn lijst", modifier = Modifier.focusRequester(list)) {
+                        if (!inMyList) Series.recordTaste(context, item, Taste.ADD_TO_LIST)
+                        store.toggleMyList(item.id)
+                    }
                     BiosButton("Trailer") { onTrailer(detail) }
                 }
             }
@@ -165,6 +174,7 @@ fun SeriesDetailScreen(
             store = store,
             onPlay = { ep -> onPlay(ep, false) },
             onDismiss = { episodesOpen = false },
+            newSince = newSince,
             onEpisodeMenu = { menuEpisode = it },
             onSeasonMenu = { menuSeason = it },
         )

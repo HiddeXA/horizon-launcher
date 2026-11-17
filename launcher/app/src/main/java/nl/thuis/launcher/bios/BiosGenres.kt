@@ -282,8 +282,21 @@ data class BiosFilter(
     val period: FilterPeriod = FilterPeriod.ALL,
     val minScore: Double = 0.0,
     val sort: FilterSort = FilterSort.POPULAR,
+    /** Filteren op series in plaats van films. */
+    val series: Boolean = false,
+    val tvGenres: Set<TvGenre> = emptySet(),
 ) {
-    val isEmpty get() = genres.isEmpty() && period == FilterPeriod.ALL && minScore == 0.0
+    val isEmpty get() = genres.isEmpty() && tvGenres.isEmpty() && period == FilterPeriod.ALL && minScore == 0.0
+
+    /** Naar films of series: periode, score en sortering blijven; genres alleen als het andere soort ze kent. */
+    fun switchTo(series: Boolean): BiosFilter = when {
+        series == this.series -> this
+        series -> copy(series = true, tvGenres = GenreCarry.toSeries(genres.map { it.id }), genres = emptySet())
+        else -> {
+            val keep = GenreCarry.keep(tvGenres.map { it.id }, Genre.entries.map { it.id })
+            copy(series = false, genres = Genre.entries.filter { it.id in keep }.toSet(), tvGenres = emptySet())
+        }
+    }
 }
 
 /** Filter zonder genres: rechtstreeks op je aanbod (jaartal uit de titel, score van de aanbieder). */

@@ -9,6 +9,7 @@ import android.util.LruCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -51,6 +52,28 @@ object Series {
     private val mutex = Mutex()
     private var loadedAt = 0L
     private val details = LruCache<Int, SeriesDetail>(24)
+
+    @Volatile private var tasteStore: Taste? = null
+    private val bg = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private val _tasteVersion = MutableStateFlow(0)
+    /** Verandert als je kijkprofiel voor series verandert (dan worden de rijen opnieuw gesorteerd). */
+    val tasteVersion: StateFlow<Int> = _tasteVersion
+
+    /** Kijkprofiel voor series: eigen opslag, staat los van films. */
+    fun taste(context: Context): Taste =
+        tasteStore ?: synchronized(this) { tasteStore ?: Taste(context.applicationContext, "series-taste").also { tasteStore = it } }
+
+    /** Kijkgedrag bij een serie vastleggen; genres worden zo nodig bij TMDB opgezocht (op de achtergrond). */
+    fun recordTaste(context: Context, item: SeriesItem, weight: Double) {
+        if (weight <= 0) return
+        val app = context.applicationContext
+        bg.launch {
+            val genres = SeriesGenres.genresFor(item, item.tmdbId ?: details.get(item.id)?.tmdbId)
+            taste(app).record(item.id, item.year, genres, weight)
+            _tasteVersion.value++
+            Log.i(TAG, "Kijkprofiel series: +${"%.1f".format(weight)} (${genres.size} genres)")
+        }
+    }
 
     @Volatile private var storeInstance: SeriesStore? = null
     fun store(context: Context): SeriesStore =

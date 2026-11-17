@@ -167,3 +167,44 @@ class NextCard(private val windowMs: Long = WINDOW_MS) {
         fun fraction(secondsLeft: Int): Float = ((WINDOW_MS / 1000 - secondsLeft).toFloat() / (WINDOW_MS / 1000)).coerceIn(0f, 1f)
     }
 }
+
+/**
+ * Wat we per serie bijhouden voor het startscherm, zonder de afleveringen opnieuw op te halen:
+ * waar je was (label + voortgang), of je klaar bent, en tot wanneer we de serie "gezien" hebben
+ * (voor het label Nieuwe aflevering).
+ */
+data class SeriesSummary(
+    val updated: Long,
+    val lastEpisodeId: Int,
+    val nextLabel: String,
+    val nextFraction: Float,
+    val finished: Boolean,
+    /** Minstens één aflevering (deels) gekeken of op gezien gezet: je volgt de serie. */
+    val started: Boolean,
+    /** [SeriesItem.modified] op het moment dat je het seriescherm voor het laatst opende. */
+    val seenModified: Long,
+    /** Wanneer je het seriescherm voor het laatst opende (afleveringen die daarna zijn toegevoegd zijn "Nieuw"). */
+    val seenAt: Long,
+)
+
+/**
+ * Label "Nieuwe aflevering": alleen bij series die je volgt (in Mijn lijst, of minstens één aflevering
+ * gekeken), en alleen als de aanbieder de serie heeft bijgewerkt sinds je het seriescherm voor het
+ * laatst opende. Tijden: [SeriesItem.modified] en [Episode.added] in seconden, [SeriesSummary.seenAt] in ms.
+ */
+object NewEpisodes {
+    fun follows(summary: SeriesSummary?, inMyList: Boolean): Boolean = inMyList || summary?.started == true
+
+    fun hasNew(item: SeriesItem, summary: SeriesSummary?, inMyList: Boolean): Boolean =
+        follows(summary, inMyList) && summary != null && item.modified > summary.seenModified
+
+    /** Is deze aflevering toegevoegd na [sinceMs] (het vorige bezoek aan het seriescherm)? */
+    fun isNew(ep: Episode, sinceMs: Long?): Boolean = sinceMs != null && ep.added > 0 && ep.added * 1000 > sinceMs
+
+    /**
+     * Hoort de serie in Verder kijken? Bezig, of helemaal uitgekeken maar met een nieuwe aflevering
+     * (dan weten we pas bij het openen welke het is).
+     */
+    fun inContinue(item: SeriesItem, summary: SeriesSummary?): Boolean =
+        summary != null && summary.started && (!summary.finished || item.modified > summary.seenModified)
+}

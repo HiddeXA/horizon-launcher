@@ -67,6 +67,7 @@ fun EpisodesScreen(
     onDismiss: () -> Unit,
     onEpisodeMenu: ((Episode) -> Unit)? = null,
     onSeasonMenu: ((Season) -> Unit)? = null,
+    newSince: Long? = null,
 ) {
     val seasons = detail.seasons
     // Alleen bij het openen bepaald: daarna blijf je staan waar je staat, ook als de voortgang verandert.
@@ -131,7 +132,7 @@ fun EpisodesScreen(
                         EpisodeRow(
                             ep = ep,
                             state = store.episodes[ep.id],
-                            isNew = false,
+                            isNew = NewEpisodes.isNew(ep, newSince),
                             onClick = { onPlay(ep) },
                             onLongClick = onEpisodeMenu?.let { m -> { m(ep) } },
                             modifier = if (isStart) Modifier.focusRequester(startFocus) else Modifier,

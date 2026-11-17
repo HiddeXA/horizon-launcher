@@ -554,10 +554,23 @@ class MyList(context: Context) {
     val ids = mutableStateListOf<Int>().apply {
         addAll(prefs.getString("ids", "")!!.split(',').mapNotNull { it.toIntOrNull() })
     }
+    // Wanneer een film in de lijst kwam (om met series te mengen). Films van vóór deze versie: 0.
+    private val times = HashMap<Int, Long>().apply {
+        prefs.getString("times", "")!!.split(',').forEach { e ->
+            val id = e.substringBefore(':').toIntOrNull() ?: return@forEach
+            put(id, e.substringAfter(':', "0").toLongOrNull() ?: 0L)
+        }
+    }
 
     fun contains(id: Int) = id in ids
     fun toggle(id: Int) {
-        if (!ids.remove(id)) ids.add(0, id)
-        prefs.edit().putString("ids", ids.joinToString(",")).apply()
+        if (!ids.remove(id)) { ids.add(0, id); times[id] = System.currentTimeMillis() } else times.remove(id)
+        prefs.edit()
+            .putString("ids", ids.joinToString(","))
+            .putString("times", times.entries.joinToString(",") { "${it.key}:${it.value}" })
+            .apply()
     }
+
+    /** Films met het moment van toevoegen, in de volgorde van de lijst. */
+    fun entries(): List<Pair<Int, Long>> = ids.map { it to (times[it] ?: 0L) }
 }

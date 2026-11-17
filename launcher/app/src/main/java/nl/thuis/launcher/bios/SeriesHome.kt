@@ -61,7 +61,11 @@ import kotlinx.coroutines.launch
 import nl.thuis.launcher.ui.StageBaker
 
 @Immutable
-data class SeriesRow(val key: String, val title: String, val items: List<SeriesItem>, val showProgress: Boolean = false)
+data class SeriesRow(val key: String, val title: String, val items: List<SeriesItem>, val showProgress: Boolean = false, val showNew: Boolean = false)
+
+/** Tekst voor de band bovenop een tegel, of null. */
+fun newEpisodeBand(item: SeriesItem, store: SeriesStore): String? =
+    if (NewEpisodes.hasNew(item, store.summaries[item.id], store.inMyList(item.id))) "Nieuwe aflevering" else null
 
 private val SeriesBillboardHeight = 290.dp
 private val SeriesTileShape = RoundedCornerShape(6.dp)
@@ -71,7 +75,13 @@ private val SeriesTileShape = RoundedCornerShape(6.dp)
  * Nieuwe series, Top series, Verder kijken, (Aanbevolen series), Mijn lijst, en daarna de genres.
  * Zonder TMDB: de categorieën van je aanbieder.
  */
-fun buildSeriesRows(idx: SeriesIndex, genreRows: Map<String, List<Int>>?, store: SeriesStore): List<SeriesRow> {
+fun buildSeriesRows(
+    idx: SeriesIndex,
+    genreRows: Map<String, List<Int>>?,
+    store: SeriesStore,
+    taste: List<TasteEvent>,
+    recommended: List<SeriesItem>,
+): List<SeriesRow> {
     val rows = ArrayList<SeriesRow>()
     val thisYear = java.time.LocalDate.now().year
 
@@ -85,14 +95,21 @@ fun buildSeriesRows(idx: SeriesIndex, genreRows: Map<String, List<Int>>?, store:
     val top = genreRows?.get("top").orEmpty().mapNotNull { idx.byId[it] }
     if (top.size >= 6) rows += SeriesRow("genre:top", "Top series", top)
 
-    val going = store.summaries.entries.filter { !it.value.finished }.sortedByDescending { it.value.updated }.mapNotNull { idx.byId[it.key] }
-    if (going.isNotEmpty()) rows += SeriesRow("continue", "Verder kijken", going, showProgress = true)
+    // Bezig, of uitgekeken met een nieuwe aflevering erbij; laatst gekeken eerst.
+    val going = store.summaries.entries
+        .filter { (id, sum) -> idx.byId[id]?.let { NewEpisodes.inContinue(it, sum) } == true }
+        .sortedByDescending { it.value.updated }
+        .mapNotNull { idx.byId[it.key] }
+    if (going.isNotEmpty()) rows += SeriesRow("continue", "Verder kijken", going, showProgress = true, showNew = true)
+
+    if (recommended.isNotEmpty()) rows += SeriesRow("recs", "Aanbevolen series", recommended.distinctBy { it.id })
 
     val list = store.myList.mapNotNull { idx.byId[it.first] }
-    if (list.isNotEmpty()) rows += SeriesRow("mylist", "Mijn lijst", list)
+    if (list.isNotEmpty()) rows += SeriesRow("mylist", "Mijn lijst", list, showNew = true)
 
     if (genreRows != null && genreRows.values.any { it.size >= 6 }) {
-        SeriesShelves.filterNot { it.pinned }.forEach { shelf ->
+        val scores = SeriesTasteRanking.scores(taste, SeriesShelves, System.currentTimeMillis(), thisYear)
+        SeriesTasteRanking.order(SeriesShelves, scores).filterNot { it.pinned }.forEach { shelf ->
             val items = genreRows[shelf.key].orEmpty().mapNotNull { idx.byId[it] }
             if (items.size >= 6) rows += SeriesRow("genre:${shelf.key}", shelf.title, items)
         }
@@ -170,6 +187,7 @@ fun SeriesTile(
 fun SeriesHome(
     rows: List<SeriesRow>,
     summaries: Map<Int, SeriesSummary>,
+    store: SeriesStore,
     onOpen: (SeriesItem) -> Unit,
     firstFocus: FocusRequester,
 ) {
@@ -209,11 +227,14 @@ fun SeriesHome(
                                 ) {
                                     itemsIndexed(row.items, key = { _, it -> it.id }) { i, item ->
                                         val sum = if (row.showProgress) summaries[item.id] else null
+                                        val band = if (row.showNew) newEpisodeBand(item, store) else null
                                         SeriesTile(
+                                            band = band,
                                             item = item,
                                             onClick = { onOpen(item) },
                                             onFocused = { focused = item },
-                                            label = sum?.nextLabel,
+                                            // Uitgekeken met een nieuwe aflevering: het oude label klopt niet meer, alleen de band.
+                                            label = sum?.takeIf { band == null || !it.finished }?.nextLabel,
                                             progress = sum?.nextFraction,
                                             modifier = if (index == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier,
                                         )

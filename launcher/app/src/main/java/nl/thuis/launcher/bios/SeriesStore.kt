@@ -5,23 +5,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 
 /**
- * Wat we per serie bijhouden voor het startscherm, zonder de afleveringen opnieuw op te halen:
- * waar je was (label + voortgang), of je klaar bent, en tot wanneer we de serie "gezien" hebben
- * (voor het label Nieuwe aflevering).
- */
-data class SeriesSummary(
-    val updated: Long,
-    val lastEpisodeId: Int,
-    val nextLabel: String,
-    val nextFraction: Float,
-    val finished: Boolean,
-    /** [SeriesItem.modified] op het moment dat je het seriescherm voor het laatst opende. */
-    val seenModified: Long,
-    /** Wanneer je het seriescherm voor het laatst opende (afleveringen die daarna zijn toegevoegd zijn "Nieuw"). */
-    val seenAt: Long,
-)
-
-/**
  * Posities, gezien-vinkjes en Mijn lijst voor series. Alleen op het kastje.
  * De kaarten zijn Compose-state: schermen kleuren direct mee als er iets verandert.
  */
@@ -45,7 +28,7 @@ class SeriesStore(context: Context) {
             runCatching {
                 when (k[0]) {
                     'e' -> if (p.size == 4) episodes[id] = EpState(p[0].toLong(), p[1].toLong(), p[2] == "1", p[3].toLong())
-                    's' -> if (p.size == 7) summaries[id] = SeriesSummary(p[0].toLong(), p[1].toInt(), p[2], p[3].toFloat(), p[4] == "1", p[5].toLong(), p[6].toLong())
+                    's' -> if (p.size == 8) summaries[id] = SeriesSummary(p[0].toLong(), p[1].toInt(), p[2], p[3].toFloat(), p[4] == "1", p[7] == "1", p[5].toLong(), p[6].toLong())
                 }
             }
         }
@@ -65,7 +48,7 @@ class SeriesStore(context: Context) {
         summaries[seriesId] = s
         prefs.edit().putString(
             "s$seriesId",
-            "${s.updated}|${s.lastEpisodeId}|${s.nextLabel.replace('|', ' ')}|${s.nextFraction}|${if (s.finished) 1 else 0}|${s.seenModified}|${s.seenAt}",
+            "${s.updated}|${s.lastEpisodeId}|${s.nextLabel.replace('|', ' ')}|${s.nextFraction}|${if (s.finished) 1 else 0}|${s.seenModified}|${s.seenAt}|${if (s.started) 1 else 0}",
         ).apply()
     }
 
@@ -115,6 +98,7 @@ class SeriesStore(context: Context) {
                 nextLabel = next?.episode?.label.orEmpty(),
                 nextFraction = next?.let { episodes[it.episode.id]?.takeIf { st -> st.inProgress }?.fraction } ?: 0f,
                 finished = next == null || next.finished || !started,
+                started = started,
                 seenModified = if (seen || old == null) item.modified else old.seenModified,
                 seenAt = if (seen || old == null) now else old.seenAt,
             ),

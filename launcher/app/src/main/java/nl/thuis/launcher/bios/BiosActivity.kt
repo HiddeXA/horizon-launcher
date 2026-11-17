@@ -66,7 +66,7 @@ class BiosActivity : ComponentActivity() {
                 // Terug op Zoeken, Filter of Mijn lijst: naar de tab waar je vandaan kwam. Op Films of Series sluit Horizon.
                 BackHandler(enabled = section != BiosSection.HOME && section != BiosSection.SERIES) { section = mainTab }
                 Box(Modifier.fillMaxSize()) {
-                    BiosApp(section = section, onSection = { select(it) }, searchQuery = searchQuery, context = this@BiosActivity, introVisible = introVisible)
+                    BiosApp(section = section, mainTab = mainTab, onSection = { select(it) }, searchQuery = searchQuery, context = this@BiosActivity, introVisible = introVisible)
                     if (introVisible) HorizonIntro(skip = introSkip) { introVisible = false }
                 }
             }
@@ -133,16 +133,21 @@ class BiosActivity : ComponentActivity() {
 }
 
 @Composable
-private fun BiosApp(section: BiosSection, onSection: (BiosSection) -> Unit, searchQuery: String, context: Context, introVisible: Boolean) {
+private fun BiosApp(section: BiosSection, mainTab: BiosSection, onSection: (BiosSection) -> Unit, searchQuery: String, context: Context, introVisible: Boolean) {
     val state by Bios.state.collectAsState()
     val progress = remember { Bios.progress(context) }
     val myList = remember { Bios.myList(context) }
     var detail by remember { mutableStateOf<VodItem?>(null) }
     var serie by remember { mutableStateOf<SeriesItem?>(null) }
+    val seriesState by Series.state.collectAsState()
+    val seriesIdx = (seriesState as? SeriesState.Ready)?.index
+    val seriesStore = remember { Series.store(context) }
     var settings by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(BiosFilter()) }
     val scope = rememberCoroutineScope()
     val contentFocus = remember { FocusRequester() }
+    // Filter openen: vooraf gekozen is de soort van de tab waar je vandaan kwam.
+    LaunchedEffect(section) { if (section == BiosSection.FILTER) filter = filter.switchTo(mainTab == BiosSection.SERIES) }
 
     Box(Modifier.fillMaxSize().background(HorizonColors.Background)) {
         when (val s = state) {
@@ -170,9 +175,18 @@ private fun BiosApp(section: BiosSection, onSection: (BiosSection) -> Unit, sear
                         rows?.let { BiosHome(it, progress.entries, onOpen = { detail = it }, firstFocus = contentFocus) }
                     }
                     BiosSection.SERIES -> SeriesTab(context, onOpen = { serie = it }, firstFocus = contentFocus)
-                    BiosSection.SEARCH -> BiosSearch(idx, searchQuery, onOpen = { detail = it }, firstFocus = contentFocus)
-                    BiosSection.FILTER -> BiosFilterScreen(idx, filter, onFilter = { filter = it }, onOpen = { detail = it }, firstFocus = contentFocus)
-                    BiosSection.MYLIST -> BiosMyList(myList.ids.mapNotNull { idx.byId[it] }, onOpen = { detail = it }, firstFocus = contentFocus)
+                    BiosSection.SEARCH -> BiosSearch(
+                        idx, seriesIdx, seriesStore, searchQuery,
+                        onOpen = { detail = it }, onOpenSeries = { serie = it }, firstFocus = contentFocus,
+                    )
+                    BiosSection.FILTER -> BiosFilterScreen(
+                        idx, seriesIdx, seriesStore, filter, onFilter = { filter = it },
+                        onOpen = { detail = it }, onOpenSeries = { serie = it }, firstFocus = contentFocus,
+                    )
+                    BiosSection.MYLIST -> BiosMyList(
+                        Listings.myList(myList.entries(), seriesStore.myList.toList(), idx, seriesIdx), seriesStore,
+                        onOpen = { detail = it }, onOpenSeries = { serie = it }, firstFocus = contentFocus,
+                    )
                 }
                 // Na het wisselen van tab: focus naar de inhoud (zodat je nooit "vast" zit).
                 LaunchedEffect(section, idx, introVisible) {
@@ -269,11 +283,14 @@ private fun SeriesTab(context: Context, onOpen: (SeriesItem) -> Unit, firstFocus
             LaunchedEffect(idx) { genreRows = runCatching { SeriesGenres.shelves(context, idx) }.getOrDefault(emptyMap()) }
             var rows by remember { mutableStateOf<List<SeriesRow>?>(null) }
             // Verandert er iets aan waar je was of aan Mijn lijst, dan de rijen opnieuw opbouwen.
-            val changes = store.summaries.values.fold(store.myList.size.toLong()) { a, v -> a * 31 + v.updated + (if (v.finished) 1L else 0L) }
-            LaunchedEffect(idx, genreRows, changes) {
-                rows = withContext(Dispatchers.Default) { buildSeriesRows(idx, genreRows, store) }
+            val changes = store.summaries.values.fold(store.myList.size.toLong()) { a, v -> a * 31 + v.updated + v.seenModified + (if (v.finished) 1L else 0L) }
+            val tasteVersion by Series.tasteVersion.collectAsState()
+            LaunchedEffect(idx, genreRows, changes, tasteVersion) {
+                rows = withContext(Dispatchers.Default) {
+                    buildSeriesRows(idx, genreRows, store, Series.taste(context).events, recommendedSeries(context, idx))
+                }
             }
-            rows?.let { SeriesHome(it, store.summaries, onOpen = onOpen, firstFocus = firstFocus) }
+            rows?.let { SeriesHome(it, store.summaries, store, onOpen = onOpen, firstFocus = firstFocus) }
         }
     }
 }

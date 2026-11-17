@@ -5,8 +5,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.pow
 
-/** Eén keer iets met een film gedaan: gekeken (gewicht naar minuten), in je lijst gezet, of geopend. */
-data class TasteEvent(val vodId: Int, val genres: List<Int>, val year: Int?, val weight: Double, val time: Long)
 
 /**
  * Bepaalt de volgorde van de categorieën op het startscherm. Pure Kotlin, met unit tests.
@@ -47,8 +45,8 @@ object TasteRanking {
 }
 
 /** Je kijkgedrag in Horizon, bewaard op het kastje (alleen in deze app, gaat nergens heen). */
-class Taste(context: Context) {
-    private val prefs = context.getSharedPreferences("bios-taste", Context.MODE_PRIVATE)
+class Taste(context: Context, prefsName: String = "bios-taste") {
+    private val prefs = context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
     @Volatile var events: List<TasteEvent> = load()
         private set
 
@@ -61,10 +59,13 @@ class Taste(context: Context) {
         }
     }.getOrDefault(emptyList())
 
+    fun record(item: VodItem, genres: List<Int>, weight: Double) = record(item.id, item.year, genres, weight)
+
+    /** Ook voor series (eigen [Taste] met prefsName "series-taste"): films en series beïnvloeden elkaar niet. */
     @Synchronized
-    fun record(item: VodItem, genres: List<Int>, weight: Double) {
+    fun record(id: Int, year: String?, genres: List<Int>, weight: Double) {
         if (weight <= 0) return
-        val e = TasteEvent(item.id, genres, item.year?.toIntOrNull(), weight, System.currentTimeMillis())
+        val e = TasteEvent(id, genres, year?.toIntOrNull(), weight, System.currentTimeMillis())
         events = (events + e).takeLast(400)
         val a = JSONArray()
         events.forEach { ev ->
