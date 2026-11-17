@@ -82,23 +82,39 @@ object SeriesGenres {
         rows
     }
 
-    /** Filter met genres: TMDB zoekt, wij houden alleen wat in je aanbod zit. */
-    suspend fun filter(index: SeriesIndex, genres: List<Int>, period: FilterPeriod, minScore: Double, sort: FilterSort): List<SeriesItem> = withContext(Dispatchers.IO) {
+    /**
+     * Filter met genres: TMDB zoekt, wij houden alleen wat in je aanbod zit. Zelfde regels als
+     * [BiosGenres.filter]: meerdere [combos] mogen, en geen antwoord van TMDB is een fout.
+     */
+    suspend fun filter(index: SeriesIndex, combos: List<List<Int>>, period: FilterPeriod, minScore: Double, sort: FilterSort): List<SeriesItem> = withContext(Dispatchers.IO) {
         val out = LinkedHashMap<Int, SeriesItem>()
         val order = if (sort == FilterSort.RATING) "vote_average.desc" else "popularity.desc"
-        for (page in 1..8) {
-            val list = runCatching { discover(genres, page, order, if (sort == FilterSort.RATING) 200 else 30, period, minScore) }.getOrNull() ?: break
-            if (list.isEmpty()) break
-            val found = HashMap<Int, TmdbMeta>()
-            for (m in list) {
-                val item = index.find(m.tmdbId, listOfNotNull(m.title, m.originalTitle), m.year) ?: continue
-                out.putIfAbsent(item.id, item)
-                found[item.id] = m.meta
+        val pages = if (combos.size <= 1) 8 else maxOf(2, 8 / combos.size)
+        var answered = false
+        var lastError: Throwable? = null
+        for (combo in combos) {
+            for (page in 1..pages) {
+                val list = runCatching { discover(combo, page, order, if (sort == FilterSort.RATING) 200 else 30, period, minScore) }
+                    .onFailure { lastError = it }.getOrNull() ?: break
+                answered = true
+                if (list.isEmpty()) break
+                val found = HashMap<Int, TmdbMeta>()
+                for (m in list) {
+                    val item = index.find(m.tmdbId, listOfNotNull(m.title, m.originalTitle), m.year) ?: continue
+                    out.putIfAbsent(item.id, item)
+                    found[item.id] = m.meta
+                }
+                meta = meta + found
+                if (out.size >= 60) break
             }
-            meta = meta + found
             if (out.size >= 60) break
         }
-        val list = out.values.toList()
+        if (!answered) throw java.io.IOException("TMDB niet bereikbaar", lastError)
+        var list = out.values.toList()
+        if (combos.size > 1) list = when (sort) {
+            FilterSort.RATING -> list.sortedByDescending { meta[it.id]?.vote ?: 0.0 }
+            else -> list.sortedByDescending { meta[it.id]?.popularity ?: 0.0 }
+        }
         when (sort) {
             FilterSort.AZ -> list.sortedBy { it.title.lowercase() }
             FilterSort.NEWEST -> list.sortedByDescending { it.modified }

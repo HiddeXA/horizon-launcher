@@ -145,30 +145,48 @@ object BiosGenres {
         }.getOrDefault(emptyList())
     }
 
-    /** Filter met genres: TMDB zoekt, wij houden alleen wat in je aanbod zit. */
-    suspend fun filter(index: VodIndex, f: BiosFilter): List<VodItem> = withContext(Dispatchers.IO) {
+    /**
+     * Filter met genres: TMDB zoekt, wij houden alleen wat in je aanbod zit.
+     * [combos]: genrecombinaties (binnen een combinatie alle genres, tussen combinaties één ervan).
+     * Met één combinatie is dit precies de oude zoekopdracht. Antwoordt TMDB bij geen enkele
+     * combinatie, dan een fout (zodat de pagina niet "geen films" zegt terwijl TMDB onbereikbaar is).
+     */
+    suspend fun filter(index: VodIndex, combos: List<List<Int>>, period: FilterPeriod, minScore: Double, sort: FilterSort): List<VodItem> = withContext(Dispatchers.IO) {
         val out = LinkedHashMap<Int, VodItem>()
-        val sort = when (f.sort) {
+        val order = when (sort) {
             FilterSort.POPULAR, FilterSort.NEWEST -> "popularity.desc"
             FilterSort.RATING -> "vote_average.desc"
             FilterSort.AZ -> "popularity.desc"
         }
-        for (page in 1..8) {
-            val movies = runCatching {
-                discover(f.genres.map { it.id }, page, sort, if (f.sort == FilterSort.RATING) 300 else 50, f.period, f.minScore)
-            }.getOrNull() ?: break
-            if (movies.isEmpty()) break
-            val found = HashMap<Int, TmdbMeta>()
-            for (m in movies) {
-                val item = index.find(m.tmdbId, listOfNotNull(m.title, m.originalTitle), m.year) ?: continue
-                out.putIfAbsent(item.id, item)
-                found[item.id] = m.meta
+        val pages = if (combos.size <= 1) 8 else maxOf(2, 8 / combos.size)
+        var answered = false
+        var lastError: Throwable? = null
+        for (combo in combos) {
+            for (page in 1..pages) {
+                val movies = runCatching {
+                    discover(combo, page, order, if (sort == FilterSort.RATING) 300 else 50, period, minScore)
+                }.onFailure { lastError = it }.getOrNull() ?: break
+                answered = true
+                if (movies.isEmpty()) break
+                val found = HashMap<Int, TmdbMeta>()
+                for (m in movies) {
+                    val item = index.find(m.tmdbId, listOfNotNull(m.title, m.originalTitle), m.year) ?: continue
+                    out.putIfAbsent(item.id, item)
+                    found[item.id] = m.meta
+                }
+                meta = meta + found
+                if (out.size >= 60) break
             }
-            meta = meta + found
             if (out.size >= 60) break
         }
-        val list = out.values.toList()
-        when (f.sort) {
+        if (!answered) throw java.io.IOException("TMDB niet bereikbaar", lastError)
+        var list = out.values.toList()
+        // Meerdere combinaties: opnieuw op volgorde zetten zoals TMDB dat per combinatie deed.
+        if (combos.size > 1) list = when (sort) {
+            FilterSort.RATING -> list.sortedByDescending { meta[it.id]?.vote ?: 0.0 }
+            else -> list.sortedByDescending { meta[it.id]?.popularity ?: 0.0 }
+        }
+        when (sort) {
             FilterSort.AZ -> list.sortedBy { it.title.lowercase() }
             FilterSort.NEWEST -> list.sortedByDescending { it.added }
             else -> list

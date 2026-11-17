@@ -24,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.lifecycle.lifecycleScope
@@ -181,8 +182,9 @@ private fun BiosApp(
     var filter by remember { mutableStateOf(BiosFilter()) }
     val scope = rememberCoroutineScope()
     val contentFocus = remember { FocusRequester() }
-    // Filter openen: vooraf gekozen is de soort van de tab waar je vandaan kwam.
-    LaunchedEffect(section) { if (section == BiosSection.FILTER) filter = filter.switchTo(mainTab == BiosSection.SERIES) }
+    // Filter openen: altijd op Alles (films en series samen); gekozen genres gaan mee waar dat kan.
+    LaunchedEffect(section) { if (section == BiosSection.FILTER) filter = filter.switchTo(FilterKind.ALL) }
+    var filterPanelOpen by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(HorizonColors.Background)) {
         when (val s = state) {
@@ -215,8 +217,10 @@ private fun BiosApp(
                         onOpen = { detail = it }, onOpenSeries = { serie = it }, firstFocus = contentFocus,
                     )
                     BiosSection.FILTER -> BiosFilterScreen(
-                        idx, seriesIdx, seriesStore, filter, onFilter = { filter = it },
-                        onOpen = { detail = it }, onOpenSeries = { serie = it }, firstFocus = contentFocus,
+                        idx, seriesStore, filter, onFilter = { filter = it },
+                        onOpen = { detail = it }, onOpenSeries = { serie = it }, onSettings = { settings = true },
+                        firstFocus = contentFocus, overlayOpen = detail != null || serie != null || settings,
+                        onPanelOpen = { filterPanelOpen = it },
                     )
                     BiosSection.MYLIST -> BiosMyList(
                         Listings.myList(myList.entries(), seriesStore.myList.toList(), idx, seriesIdx), seriesStore,
@@ -232,7 +236,11 @@ private fun BiosApp(
                     }
                 }
 
-                TopNav(section, onSelect = onSection, contentFocus = contentFocus, filterActive = !filter.isEmpty)
+                TopNav(
+                    section, onSelect = onSection, contentFocus = contentFocus, filterActive = !filter.isEmpty,
+                    // Met een keuzepaneel open dimt het bovenmenu mee (zoals de rest van de balk).
+                    modifier = Modifier.alpha(if (section == BiosSection.FILTER && filterPanelOpen) 0.45f else 1f),
+                )
             }
         }
 
