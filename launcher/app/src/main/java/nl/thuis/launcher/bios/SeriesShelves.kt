@@ -73,15 +73,3 @@ object SeriesTasteRanking {
         return pinned + rest
     }
 }
-
-/**
- * Wisselen in het filter tussen Films en Series: periode, score en sortering blijven staan, en
- * gekozen genres alleen als het andere soort ze ook kent. TMDB gebruikt waar ze overlappen dezelfde
- * nummers (Komedie 35, Misdaad 80, Drama 18 …); Actie (28) en Horror (27) bestaan niet bij series.
- */
-object GenreCarry {
-    fun toSeries(filmGenreIds: Collection<Int>): Set<TvGenre> = filmGenreIds.mapNotNull { TvGenre.byId[it] }.toSet()
-
-    /** Van series naar films: houd de nummers die bij films bestaan. */
-    fun keep(ids: Collection<Int>, known: Collection<Int>): Set<Int> = ids.filter { it in known }.toSet()
-}

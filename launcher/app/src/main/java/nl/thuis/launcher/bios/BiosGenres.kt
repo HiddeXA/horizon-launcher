@@ -20,19 +20,6 @@ import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.TimeUnit
 
-/** TMDB-genres met Nederlandse namen. */
-enum class Genre(val id: Int, val label: String) {
-    ACTION(28, "Actie"), ADVENTURE(12, "Avontuur"), ANIMATION(16, "Animatie"), COMEDY(35, "Komedie"),
-    CRIME(80, "Misdaad"), DOCUMENTARY(99, "Documentaire"), DRAMA(18, "Drama"), FAMILY(10751, "Familie"),
-    FANTASY(14, "Fantasy"), HISTORY(36, "Historisch"), HORROR(27, "Horror"), MUSIC(10402, "Muziek"),
-    MYSTERY(9648, "Mysterie"), ROMANCE(10749, "Romantiek"), SCIFI(878, "Sciencefiction"),
-    THRILLER(53, "Thriller"), WAR(10752, "Oorlog"), WESTERN(37, "Western");
-
-    companion object {
-        val byId = entries.associateBy { it.id }
-    }
-}
-
 /** Soort rij op het startscherm. */
 enum class ShelfKind { TOP, POPULAR, CLASSIC, GENRE }
 
@@ -267,37 +254,6 @@ object BiosGenres {
 }
 
 // --- Filter ---
-
-enum class FilterPeriod(val label: String, val from: Int?, val to: Int?) {
-    ALL("Alles", null, null), NOW("2020 en later", 2020, null), TENS("Jaren 10", 2010, 2019),
-    NOUGHTIES("Jaren 00", 2000, 2009), NINETIES("Jaren 90", 1990, 1999), EIGHTIES("Jaren 80", 1980, 1989),
-    CLASSIC("Ouder", null, 1979),
-}
-
-enum class FilterSort(val label: String) { POPULAR("Populair"), NEWEST("Nieuw toegevoegd"), RATING("Beste score"), AZ("A–Z") }
-
-@Immutable
-data class BiosFilter(
-    val genres: Set<Genre> = emptySet(),
-    val period: FilterPeriod = FilterPeriod.ALL,
-    val minScore: Double = 0.0,
-    val sort: FilterSort = FilterSort.POPULAR,
-    /** Filteren op series in plaats van films. */
-    val series: Boolean = false,
-    val tvGenres: Set<TvGenre> = emptySet(),
-) {
-    val isEmpty get() = genres.isEmpty() && tvGenres.isEmpty() && period == FilterPeriod.ALL && minScore == 0.0
-
-    /** Naar films of series: periode, score en sortering blijven; genres alleen als het andere soort ze kent. */
-    fun switchTo(series: Boolean): BiosFilter = when {
-        series == this.series -> this
-        series -> copy(series = true, tvGenres = GenreCarry.toSeries(genres.map { it.id }), genres = emptySet())
-        else -> {
-            val keep = GenreCarry.keep(tvGenres.map { it.id }, Genre.entries.map { it.id })
-            copy(series = false, genres = Genre.entries.filter { it.id in keep }.toSet(), tvGenres = emptySet())
-        }
-    }
-}
 
 /** Filter zonder genres: rechtstreeks op je aanbod (jaartal uit de titel, score van de aanbieder). */
 fun filterCatalog(index: VodIndex, f: BiosFilter, limit: Int = 120): List<VodItem> {
