@@ -124,3 +124,46 @@ object EpisodeTitles {
         return s
     }
 }
+
+/**
+ * De kaart "Volgende aflevering" in de speler: zichtbaar in de laatste 10 s als er een volgende is.
+ * De aftelling volgt de positie in de aflevering, dus pauzeren houdt hem vanzelf stil.
+ * Annuleren verbergt de kaart tot je terugspoelt tot vóór de laatste 10 s.
+ * Is de duur onbekend, dan verschijnt de kaart pas als de aflevering is afgelopen en telt hij 10 s op de klok af.
+ */
+class NextCard(private val windowMs: Long = WINDOW_MS) {
+    var dismissed = false
+        private set
+    private var endedAt: Long? = null
+
+    /** Seconden op de kaart, of null als de kaart niet in beeld hoort. */
+    fun secondsLeft(positionMs: Long, durationMs: Long, hasNext: Boolean, nowMs: Long): Int? {
+        if (!hasNext) return null
+        endedAt?.let { e ->
+            if (dismissed) return null
+            return ceilSeconds(windowMs - (nowMs - e))
+        }
+        if (durationMs <= 0) return null
+        val left = durationMs - positionMs
+        if (left > windowMs) { dismissed = false; return null }
+        if (dismissed) return null
+        return ceilSeconds(left)
+    }
+
+    fun dismiss() { dismissed = true }
+
+    fun endedWithoutDuration(nowMs: Long) { endedAt = nowMs }
+
+    /** Na afloop zonder bekende duur: is de aftelling voorbij? */
+    fun expired(nowMs: Long): Boolean = endedAt?.let { nowMs - it >= windowMs } == true
+
+    fun reset() { dismissed = false; endedAt = null }
+
+    private fun ceilSeconds(ms: Long): Int = ((ms.coerceAtLeast(0) + 999) / 1000).toInt()
+
+    companion object {
+        const val WINDOW_MS = 10_000L
+        /** Hoe ver de balk op de kaart gevuld is (0 bij 10 s, 1 bij 0 s). */
+        fun fraction(secondsLeft: Int): Float = ((WINDOW_MS / 1000 - secondsLeft).toFloat() / (WINDOW_MS / 1000)).coerceIn(0f, 1f)
+    }
+}

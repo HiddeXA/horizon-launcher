@@ -155,6 +155,9 @@ fun SeriesDetailScreen(
         }
     }
 
+    var menuEpisode by remember { mutableStateOf<Episode?>(null) }
+    var menuSeason by remember { mutableStateOf<Season?>(null) }
+
     if (episodesOpen && detail != null && hasEpisodes) {
         EpisodesScreen(
             item = item,
@@ -162,6 +165,42 @@ fun SeriesDetailScreen(
             store = store,
             onPlay = { ep -> onPlay(ep, false) },
             onDismiss = { episodesOpen = false },
+            onEpisodeMenu = { menuEpisode = it },
+            onSeasonMenu = { menuSeason = it },
+        )
+    }
+
+    // Lang OK op een aflevering: gezien of niet gezien, of vanaf het begin.
+    if (detail != null) menuEpisode?.let { ep ->
+        val st = store.episodes[ep.id]
+        val watched = st?.watched == true
+        EpisodeMenu(
+            kicker = item.title,
+            title = "${ep.label}  ${ep.title}",
+            subtitle = when {
+                watched -> "Gezien"
+                st?.inProgress == true -> "Je was bij ${timecode(st.positionMs)}"
+                else -> "Nog niet gezien"
+            },
+            choices = listOf(
+                MenuChoice(if (watched) "Markeer als niet gezien" else "Markeer als gezien") { store.setWatched(item, detail, listOf(ep), !watched) },
+                MenuChoice("Vanaf begin afspelen") { onPlay(ep, true) },
+            ),
+            onDismiss = { menuEpisode = null },
+        )
+    }
+
+    // Lang OK op een seizoen: alles in één keer.
+    if (detail != null) menuSeason?.let { season ->
+        EpisodeMenu(
+            kicker = item.title,
+            title = season.label,
+            subtitle = "${Watched.count(season, store.episodes)} van ${season.episodes.size} gezien",
+            choices = listOf(
+                MenuChoice("Heel seizoen gezien") { store.setWatched(item, detail, season.episodes, true) },
+                MenuChoice("Heel seizoen niet gezien") { store.setWatched(item, detail, season.episodes, false) },
+            ),
+            onDismiss = { menuSeason = null },
         )
     }
 }

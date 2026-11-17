@@ -17,9 +17,17 @@ import androidx.media3.ui.R as MR
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
+import android.graphics.drawable.StateListDrawable
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -39,6 +47,9 @@ import kotlin.math.abs
  * - Spoelen: één tik = 30 s vooruit of terug. Ingedrukt houden begint rustig en gaat steeds sneller.
  * - Titel van de film bovenin zolang de bediening in beeld is.
  * - Lukt afspelen niet (bijv. een formaat dat het kastje niet kent), dan biedt hij Kodi aan.
+ * - Bij een aflevering: serienaam en S·A bovenin, een knop Volgende aflevering, en in de laatste 10 s
+ *   een kaart die aftelt naar de volgende. Er speelt altijd maar één stream: dezelfde speler wisselt
+ *   van aflevering.
  */
 class PlayerActivity : ComponentActivity() {
 
@@ -51,6 +62,19 @@ class PlayerActivity : ComponentActivity() {
     private var seriesItem: SeriesItem? = null
     private var seriesDetail: SeriesDetail? = null
     private var ended = false
+    private var nextEpisode: Episode? = null
+    private val card = NextCard()
+    private var cardSeconds by mutableStateOf<Int?>(null)
+    private var cardFocus by mutableIntStateOf(0)
+    private lateinit var titleView: TextView
+    private var nextButton: TextView? = null
+
+    private val cardTicker = object : Runnable {
+        override fun run() {
+            updateCard()
+            handler.postDelayed(this, 250)
+        }
+    }
     private val handler = Handler(Looper.getMainLooper())
     private val prefs by lazy { getSharedPreferences("bios-player", MODE_PRIVATE) }
 
@@ -110,7 +134,7 @@ class PlayerActivity : ComponentActivity() {
         }
 
         // Titelbalk bovenin, alleen zichtbaar samen met de bediening.
-        val title = TextView(this).apply {
+        val title = TextView(this).also { titleView = it }.apply {
             text = if (ep != null) episodeHeading(serie!!.title, ep) else item!!.title + (item.year?.let { "  ($it)" } ?: "")
             setTextColor(TEXT)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
@@ -133,7 +157,18 @@ class PlayerActivity : ComponentActivity() {
             visibility = View.GONE
         }
         root.addView(seekLabel, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM).apply { bottomMargin = dp(150) })
+        root.addView(
+            ComposeView(this).apply {
+                setContent {
+                    val n = nextEpisode
+                    val secs = cardSeconds
+                    if (n != null && secs != null) HorizonTheme { NextEpisodeCard(n, secs, cardFocus) }
+                }
+            },
+            FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply { rightMargin = dp(48); bottomMargin = dp(44) },
+        )
         setContentView(root)
+        if (ep != null) addNextButton(poppins)
 
         view.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
             title.visibility = v
@@ -162,11 +197,19 @@ class PlayerActivity : ComponentActivity() {
                     start,
                 )
                 p.addListener(object : Player.Listener {
-                    override fun onPlayerError(error: PlaybackException) = showError(error, name, url, ep != null)
+                    override fun onPlayerError(error: PlaybackException) {
+                        // De aflevering die nu speelt (kan na doorkijken een andere zijn dan bij het openen).
+                        val e = episode
+                        val serie2 = seriesItem
+                        if (e != null && serie2 != null) showError(error, "${serie2.title} · ${e.label}", Series.episodeUrl(e), true)
+                        else showError(error, name, url, false)
+                    }
                     override fun onPlaybackStateChanged(state: Int) {
                         if (state == Player.STATE_ENDED) {
-                            if (ep != null) markEpisodeWatched() else Bios.progress(this@PlayerActivity).remove(itemId)
-                            finish()
+                            if (episode != null) episodeEnded() else {
+                                Bios.progress(this@PlayerActivity).remove(itemId)
+                                finish()
+                            }
                         }
                     }
                     override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) =
@@ -176,6 +219,99 @@ class PlayerActivity : ComponentActivity() {
                 p.prepare()
             }
         handler.postDelayed(saver, 10_000)
+        if (ep != null) {
+            nextEpisode = seriesDetail?.let { EpisodeOrder.next(it.seasons, ep.id) }
+            nextButton?.visibility = if (nextEpisode != null) View.VISIBLE else View.GONE
+            handler.post(cardTicker)
+        }
+    }
+
+    // --- Afleveringen: doorkijken ---
+
+    /** Knop "Volgende aflevering" in de knoppenrij onderaan, naast Ondertitels (ontwerp bord E). */
+    private fun addNextButton(font: Typeface) {
+        val row = view.findViewById<ViewGroup>(MR.id.exo_basic_controls) ?: return
+        val pill = { color: Int -> GradientDrawable().apply { setColor(color); cornerRadius = dp(22).toFloat() } }
+        val b = TextView(this).apply {
+            id = View.generateViewId()
+            text = "Volgende aflevering"
+            setTextColor(android.content.res.ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf()),
+                intArrayOf(0xFF0B132B.toInt(), TEXT),
+            ))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = font
+            gravity = Gravity.CENTER
+            setPadding(dp(18), 0, dp(18), 0)
+            background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused), pill(TEXT))
+                addState(intArrayOf(), pill(0xFF26315A.toInt()))
+            }
+            isFocusable = true
+            isClickable = true
+            setOnClickListener { playNext() }
+        }
+        row.addView(b, 0, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(12); gravity = Gravity.CENTER_VERTICAL })
+        nextButton = b
+    }
+
+    /** Elke 250 ms: hoort de kaart in beeld, en met hoeveel seconden? */
+    private fun updateCard() {
+        val p = player ?: return
+        val dur = p.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: 0L
+        val now = SystemClock.uptimeMillis()
+        val before = cardSeconds
+        cardSeconds = card.secondsLeft(p.currentPosition, dur, nextEpisode != null, now)
+        if (before == null && cardSeconds != null) {
+            cardFocus = 0
+            view.hideController()
+        }
+        // Afgelopen zonder bekende duur: na de aftelling door naar de volgende.
+        if (card.expired(now) && !card.dismissed) playNext()
+    }
+
+    private fun episodeEnded() {
+        markEpisodeWatched()
+        val hasNext = nextEpisode != null
+        when {
+            !hasNext || card.dismissed -> finish() // terug naar het seriescherm, dat al naar de volgende wijst
+            cardSeconds != null -> playNext() // aftelling op 0
+            else -> { card.endedWithoutDuration(SystemClock.uptimeMillis()); updateCard() }
+        }
+    }
+
+    /** Naar de volgende aflevering: de huidige telt als gezien, de volgende begint vooraan. */
+    private fun playNext() {
+        val next = nextEpisode ?: return
+        if (!ended) markEpisodeWatched()
+        startEpisode(next)
+    }
+
+    private fun startEpisode(ep: Episode) {
+        val p = player ?: return
+        val s = seriesItem ?: return
+        flushTaste()
+        episode = ep
+        ended = false
+        lastPos = -1
+        card.reset()
+        cardSeconds = null
+        nextEpisode = seriesDetail?.let { EpisodeOrder.next(it.seasons, ep.id) }
+        nextButton?.visibility = if (nextEpisode != null) View.VISIBLE else View.GONE
+        titleView.text = episodeHeading(s.title, ep)
+        // Eerst de oude stream stoppen: het abonnement staat maar één verbinding toe.
+        p.stop()
+        p.clearMediaItems()
+        p.setMediaItem(
+            MediaItem.Builder()
+                .setUri(Uri.parse(Series.episodeUrl(ep)))
+                .setMediaMetadata(MediaMetadata.Builder().setTitle("${s.title} · ${ep.label}").build())
+                .build(),
+            0L,
+        )
+        p.prepare()
+        p.playWhenReady = true
+        view.showController()
     }
 
     // --- Ondertitels: keuze onthouden voor de volgende film ---
@@ -210,7 +346,8 @@ class PlayerActivity : ComponentActivity() {
     }
 
     private fun focusButtonRow(): Boolean {
-        val target = listOf(MR.id.exo_subtitle, MR.id.exo_settings).firstNotNullOfOrNull { id ->
+        val ids = listOfNotNull(nextButton?.id, MR.id.exo_subtitle, MR.id.exo_settings)
+        val target = ids.firstNotNullOfOrNull { id ->
             view.findViewById<View>(id)?.takeIf { it.visibility == View.VISIBLE && it.isFocusable }
         }
         return target?.requestFocus() == true
@@ -222,6 +359,23 @@ class PlayerActivity : ComponentActivity() {
         val inButtons = controllerUp && focusInButtonRow()
         val onTimeBar = currentFocus?.id == MR.id.exo_progress
         val down = event.action == KeyEvent.ACTION_DOWN
+
+        // Kaart Volgende aflevering in beeld: links/rechts kiest, OK doet, terug = Annuleren.
+        if (cardSeconds != null) when (event.keyCode) {
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (down) cardFocus = if (event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else 0
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (event.action == KeyEvent.ACTION_UP) { if (cardFocus == 0) playNext() else cancelCard() }
+                return true
+            }
+            KeyEvent.KEYCODE_BACK -> {
+                if (event.action == KeyEvent.ACTION_UP) cancelCard()
+                return true
+            }
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> return true
+        }
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_BACK -> if (controllerUp && down) {
@@ -316,6 +470,13 @@ class PlayerActivity : ComponentActivity() {
         return text
     }
 
+    /** Annuleren: de kaart weg en de aflevering speelt uit. Was hij al afgelopen, dan terug naar het seriescherm. */
+    private fun cancelCard() {
+        card.dismiss()
+        cardSeconds = null
+        if (ended) finish()
+    }
+
     /** De aflevering is afgelopen: gezien, en de serie wijst naar de volgende. */
     private fun markEpisodeWatched() {
         val ep = episode ?: return
@@ -327,6 +488,9 @@ class PlayerActivity : ComponentActivity() {
 
     private fun showError(error: PlaybackException, name: String, url: String, isEpisode: Boolean) {
         val what = if (isEpisode) "aflevering" else "film"
+        // Niet vanzelf doorgaan naar een volgende aflevering na een fout.
+        handler.removeCallbacks(cardTicker)
+        cardSeconds = null
         saveProgress()
         val kodi = packageManager.getLaunchIntentForPackage(KODI) != null
         val msg = when (error.errorCode) {
